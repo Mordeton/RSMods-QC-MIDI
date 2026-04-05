@@ -1,3 +1,10 @@
+QC midi fork.
+
+How to set up presets on QC:
+<img width="1198" height="1131" alt="image" src="https://github.com/user-attachments/assets/0e1aeab4-bbf2-4e43-9914-b2f180bba8de" />
+
+Rest of instructions is in the release.
+
 # The Rocksmith Mods that nobody asked for
 
 [![Build status](https://ci.appveyor.com/api/projects/status/github/Lovrom8/rsmods?svg=true)](https://ci.appveyor.com/project/Lovrom8/rsmods)
