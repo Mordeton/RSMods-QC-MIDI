@@ -1,6 +1,3 @@
-#ifdef _WIN32
-#include "../stdafx.h"
-#endif
 #include <sstream>
 #include "ToneSourceTimeline.hpp"
 

@@ -12,6 +12,11 @@ This fork is aimed at testers and power users who want:
 
 This project targets **Rocksmith 2014 Remastered on Windows**.
 
+Linux development targets the Windows game and mod running under Steam Proton
+on Bazzite. See the [Bazzite development guide](docs/bazzite-development.md) for
+the current source baseline, build workflow, installation tools and verification
+steps. QC MIDI and RSASIO hardware integration need separate runtime testing.
+
 It is **not** for Rocksmith+ / “Rocksmith 2024”.
 
 ## Quick Start

@@ -35,7 +35,7 @@ namespace RSMods
                              QCAutomationSectionIdleTarget, QCAutomationSectionSoloKeywords, QCAutomationSectionDistKeywords, QCAutomationSectionODKeywords, QCAutomationSectionCleanKeywords,
                              QCAutomationSectionModKeywords, QCAutomationSectionSoloPriority, QCAutomationSectionDistPriority, QCAutomationSectionODPriority, QCAutomationSectionCleanPriority, QCAutomationSectionModPriority,
                              MidiSoftwareSemitoneTriggers, MidiSoftwareSemitoneSettings, MidiSoftwareTrueTuningTriggers, MidiSoftwareTrueTuningSettings, ChordsMode,
-                             RiffRepeaterAboveHundred, ShowCurrentNoteOnScreen, OnScreenFont, OnScreenFontSize, ProfileToLoad, ShowSongTimerWhen, ShowSelectedVolumeWhen, SecondaryMonitor, RemoveSongPreviews, OverrideInputVolumeEnabled, OverrideInputVolumeDevice,
+                             RiffRepeaterAboveHundred, ShowCurrentNoteOnScreen, OnScreenFont, OnScreenFontSize, ProfileToLoad, ShowSongTimerWhen, SecondaryMonitor, RemoveSongPreviews, OverrideInputVolumeEnabled, OverrideInputVolumeDevice,
                              AllowAudioInBackground, BypassTwoRTCMessageBox, LinearRiffRepeater, UseAlternativeOutputSampleRate, AllowLooping, AllowRewind, FixOculusCrash, FixBrokenTones, UseCustomNSPTimer, DisplayCurrentAccuracy, PreventMidSongPause, RemoveFingerprints, Ultrawide, FastProfileLoadAndSave,
 
 

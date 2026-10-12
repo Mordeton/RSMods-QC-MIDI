@@ -1019,10 +1019,10 @@ namespace {
 		return onlyMatch;
 	}
 
-	void IncrementCounter(std::array<uint8_t, 16>& counter) {
-		for (int i = static_cast<int>(counter.size()) - 1; i >= 0; --i) {
-			counter[static_cast<std::size_t>(i)] = static_cast<uint8_t>(counter[static_cast<std::size_t>(i)] + 1);
-			if (counter[static_cast<std::size_t>(i)] != 0) {
+	void IncrementCounter(std::array<uint8_t, 16>& cipherCounter) {
+		for (int i = static_cast<int>(cipherCounter.size()) - 1; i >= 0; --i) {
+			cipherCounter[static_cast<std::size_t>(i)] = static_cast<uint8_t>(cipherCounter[static_cast<std::size_t>(i)] + 1);
+			if (cipherCounter[static_cast<std::size_t>(i)] != 0) {
 				break;
 			}
 		}
@@ -1039,13 +1039,13 @@ namespace {
 			return false;
 		}
 
-		std::array<uint8_t, 16> counter = iv;
+		std::array<uint8_t, 16> cipherCounter = iv;
 		output.assign(input.size(), 0);
 
 		std::size_t offset = 0;
 		while (offset < input.size()) {
 			uint8_t keystream[16]{};
-			if (!aes.EncryptBlock(counter.data(), keystream, error)) {
+			if (!aes.EncryptBlock(cipherCounter.data(), keystream, error)) {
 				return false;
 			}
 
@@ -1054,7 +1054,7 @@ namespace {
 				output[offset + i] = static_cast<uint8_t>(input[offset + i] ^ keystream[i]);
 			}
 
-			IncrementCounter(counter);
+			IncrementCounter(cipherCounter);
 			offset += blockLen;
 		}
 

@@ -1,6 +1,7 @@
 # Project-specific files (DLL build output / linker byproducts)
 xinput1_3.dll
 dist/
+.local/
 Installer/Resources/*.exp
 Installer/Resources/*.lib
 DLL/Installer/Resources/*.exp
