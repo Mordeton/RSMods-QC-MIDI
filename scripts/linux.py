@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -168,7 +169,20 @@ def gui(game):
     if not (game / "RSMods/RSMods.exe").exists():
         raise ValueError("RSMods GUI is not installed")
     os.execvp("protontricks", ["protontricks", "--cwd-app", "-c",
-                              'wine "RSMods/RSMods.exe"', APP_ID])
+                              'wine "RSMods/RSMods.exe"; rsmods_exit=$?; wineserver -w; exit "$rsmods_exit"', APP_ID])
+
+
+def midi():
+    root = Path(__file__).resolve().parent.parent
+    source = root / "scripts/WinMidiProbe.cs"
+    output = root / ".local/WinMidiProbe.exe"
+    output.parent.mkdir(exist_ok=True)
+    def wine_path(path):
+        return "Z:" + str(path).replace("/", "\\")
+    compiler = ["wine", r"C:\windows\Microsoft.NET\Framework\v4.0.30319\csc.exe",
+                "/nologo", "/platform:x86", "/out:" + wine_path(output), wine_path(source)]
+    command = shlex.join(compiler) + " && " + shlex.join(["wine", str(output)]) + " && wineserver -w"
+    subprocess.run(["protontricks", "-c", command, APP_ID], check=True)
 
 
 def main():
@@ -177,6 +191,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="Print a read-only diagnostic JSON snapshot")
     sub.add_parser("gui", help="Open RSMods in Rocksmith's Proton prefix")
+    sub.add_parser("midi", help="Compile and run a read-only 32-bit WinMM MIDI probe")
     inst = sub.add_parser("install", help="Install a verified portable ZIP with backups")
     inst.add_argument("--archive", required=True)
     inst.add_argument("--sha256", required=True)
@@ -187,9 +202,12 @@ def main():
             doctor(game)
         elif args.command == "install":
             install(args, game)
+        elif args.command == "midi":
+            midi()
         else:
             gui(game)
-    except (OSError, ValueError, zipfile.BadZipFile, subprocess.TimeoutExpired) as exc:
+    except (OSError, ValueError, zipfile.BadZipFile, subprocess.TimeoutExpired,
+            subprocess.CalledProcessError) as exc:
         parser.exit(1, f"Error: {exc}\n")
 
 

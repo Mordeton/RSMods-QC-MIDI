@@ -40,6 +40,7 @@ From the repository root:
 python3 scripts/test-linux.py
 python3 -m unittest discover -s scripts/tests -v
 python3 scripts/linux.py doctor
+python3 scripts/linux.py midi
 python3 scripts/linux.py gui
 ```
 
@@ -90,7 +91,7 @@ driver and routing are ready. A per-executable Wine registry override can also
 select the RSMods DLL without editing Steam's configuration while Steam is open:
 
 ```sh
-protontricks -c 'wine reg add "HKCU\Software\Wine\AppDefaults\Rocksmith2014.exe\DllOverrides" /v xinput1_3 /t REG_SZ /d native,builtin /f' 221680
+protontricks -c 'wine reg add "HKCU\Software\Wine\AppDefaults\Rocksmith2014.exe\DllOverrides" /v xinput1_3 /t REG_SZ /d native,builtin /f && wineserver -w' 221680
 ```
 
 Use `scripts/linux.py gui` to run the GUI in the same prefix, rather than a
@@ -119,10 +120,12 @@ backups. The portable installer does not modify `cache.psarc`, song DLC or saves
 | Input | Quad Cortex, currently exposed as an 8-channel surround source |
 | QC USB format | 8 input and 8 output channels, 48 kHz, S32_LE container with 24 valid bits |
 | QC MIDI | ALSA `Quad Cortex MIDI 1` |
+| Wine MIDI | The 32-bit WinMM probe also enumerated `Quad Cortex MIDI 1` |
 | Initial RSASIO | Not installed |
 
 Card and node numbers are transient. Linux seeing the MIDI port does not prove
-that Wine enumerates it or that a QC preset recall succeeds. The existing
+that Wine enumerates it; the separate WinMM probe verified enumeration through
+this Proton prefix. An actual QC preset recall still needs testing. The existing
 Rocksmith configuration initially had `ExclusiveMode=0` and
 `Win32UltraLowLatencyMode=0`; RSASIO's normal configuration uses both set to `1`,
 but those changes belong with the ASIO driver setup and testing.
