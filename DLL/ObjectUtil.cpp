@@ -27,8 +27,9 @@ namespace ObjectUtil {
 
 			for (size_t i = 0; i < parent->childCount; i++)
 			{
-				if (childrenArray[i] != nullptr) {
-					children.push_back(parent->children[i]);
+				Object* child = childrenArray[i];
+				if (child != nullptr) {
+					children.push_back(child);
 				}
 			}
 		}
@@ -54,23 +55,24 @@ namespace ObjectUtil {
 
 		for (auto child : children)
 		{
-			if (!child->className || MemUtil::IsBadReadPtr(child->className))
+			if (!child || !child->className || MemUtil::IsBadReadPtr(child->className))
 			{
 				continue;
 			}
 
-			std::scoped_lock<std::mutex> lock(ObjectScaleMutex);
+			std::scoped_lock lock(ObjectScaleMutex);
 
 			std::string className = child->className;
-			if (ObjectScaleMap.find(className) == ObjectScaleMap.end()) continue;
+			auto it = ObjectScaleMap.find(className);
+			if (it == ObjectScaleMap.end()) continue;
 
-			child->scale = ObjectScaleMap[className];
+			child->scale = it->second;
 		}
 	}
 
 	void SetObjectScales(const std::map<std::string, float>& scales)
 	{
-		std::scoped_lock<std::mutex> lock(ObjectScaleMutex);
+		std::scoped_lock lock(ObjectScaleMutex);
 
 		//Apply scales to map
 		for (const auto& [key, value] : scales) {

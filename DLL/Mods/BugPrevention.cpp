@@ -1,5 +1,6 @@
 #include "../stdafx.h"
 #include "BugPrevention.hpp"
+#include "../MemUtil.hpp"
 
 namespace BugPrevention {
 
@@ -50,6 +51,15 @@ namespace BugPrevention {
 		LOG_INFO("(BUG PREVENTION) Allowed Complex Uplay Passwords" << std::endl);
 	}
 
+	/// <summary>
+	/// Skip profile save file Steam Account Id check to allow sharing profiles without needing external tooling.
+	/// </summary>
+	void BypassSaveFilePlatformIdCheck() {
+		constexpr byte alwaysContinue = 0xEB;
+		MemUtil::PatchAdr(Offsets::ptr_SaveFilePlatformIdCheck, &alwaysContinue, sizeof(alwaysContinue));
+		LOG_INFO("(BUG PREVENTION) Allowed cross-platform-ID PRFLDB and JSON reads" << std::endl);
+	}
+
 	void __declspec(naked) advancedDisplayCrashHook()
 	{
 		__asm {
@@ -62,15 +72,8 @@ namespace BugPrevention {
 			push EDI						// The code we are overwriting to place this hook
 			MOV EDI, DWORD PTR DS : [ESI + 0xC] // The code we are overwriting to place this hook
 
-			pushad
-
-			lea ecx, Offsets::ptr_AdvancedDisplayCrashJmpBck
-			call VersioningStruct<uintptr_t>::GetValue
-			mov Offsets::runtimeVersionStructValue, eax
-
-			popad
-
-			jmp Offsets::runtimeVersionStructValue
+			push offset Offsets::ptr_AdvancedDisplayCrashJmpBck
+			jmp MemUtil::JumpToVersioned
 
 			prevAdvancedDisplayCrash :
 			ret							// ECX is NULL, so we need to leave this function or we will crash.
@@ -113,8 +116,122 @@ namespace BugPrevention {
 		LOG_INFO("(BUG PREVENTION) Prevented Additional Audio Devices Crash" << std::endl);
 	}
 
+	void __declspec(naked) controllerAxisBoundsHook() {
+		__asm {
+			pushfd
+			pushad
+			mov eax, dword ptr [esp + 40] // First argument.
+			cmp dword ptr [eax + 8], -1
+			jne validControllerAxisRecord
+			cmp dword ptr [eax + 4], 4
+			jb validControllerAxisRecord // Unsigned comparison also rejects negative indices.
+			popad
+			popfd
+			ret 4
+
+		validControllerAxisRecord:
+			popad
+			popfd
+			push ebp
+			mov ebp, esp
+			sub esp, 8 // Original six-byte prologue
+			push offset Offsets::ptr_ControllerAxisBoundsJmpBck
+			jmp MemUtil::JumpToVersioned
+		}
+	}
+
 	/// <summary>
-	/// Fixes crash when modifying functions in Rocksmith. 
+	/// Ignore controller-axis updates with indices outside the game's supported range.
+	/// Button input remains available.
+	/// </summary>
+	void PreventControllerAxisOverflow() {
+		if (!MemUtil::PlaceHook(Offsets::ptr_ControllerAxisBounds, controllerAxisBoundsHook, 6)) {
+			LOG_ERROR("(BUG PREVENTION) Failed controller input crash guard" << std::endl);
+			return;
+		}
+		FlushInstructionCache(GetCurrentProcess(), (void*)Offsets::ptr_ControllerAxisBounds.Get(), 6);
+		LOG_INFO("(BUG PREVENTION) Prevented controller input crash" << std::endl);
+	}
+
+	void __stdcall LogInvalidUIInputCrash() {
+		LOG_WARNING("(BUG PREVENTION) Prevented crash from invalid UI input" << std::endl);
+	}
+
+	void __declspec(naked) invalidInputTreeRootHook() {
+		__asm {
+			test ebx, ebx
+			jz emptyInputTree
+			js invalidInputTree
+			cmp ebx, 0x10000
+			jb invalidInputTree
+			test ebx, ebx // Preserve the original TEST flags on the normal lookup path.
+			push offset Offsets::ptr_InvalidInputTreeRootJmpBck
+			jmp MemUtil::JumpToVersioned
+
+		invalidInputTree:
+			pushfd
+			pushad
+			call LogInvalidUIInputCrash
+			popad
+			popfd
+		emptyInputTree:
+			push offset Offsets::ptr_InvalidInputTreeRootEmptyJmpBck
+			jmp MemUtil::JumpToVersioned
+		}
+	}
+
+	/// <summary>
+	/// Sign-in UI can access an invalid input root while looking up an action.
+	/// Treat negative or low addresses like empty input to avoid a crash.
+	/// Original report: https://discord.com/channels/238233332511539200/305406306821472257/1552076343632728065
+	/// </summary>
+	void PreventInvalidInputTreeRootCrash() {
+		constexpr int hookLength = 8; // Replaces the original input check.
+		if (!MemUtil::PlaceHook(Offsets::ptr_InvalidInputTreeRootCheck, invalidInputTreeRootHook, hookLength)) {
+			LOG_ERROR("(BUG PREVENTION) Failed UI input crash guard" << std::endl);
+			return;
+		}
+
+		FlushInstructionCache(GetCurrentProcess(), (void*)Offsets::ptr_InvalidInputTreeRootCheck.Get(), hookLength);
+		LOG_INFO("(BUG PREVENTION) Installed UI input crash guard" << std::endl);
+	}
+
+	/// <summary>
+	/// Clamps the sample count to the buffer's real capacity before it is stored.
+	/// </summary>
+	void __declspec(naked) calibrationSampleCountClampHook() {
+		__asm {
+			mov edx, dword ptr [esp + 0x10]		// The code we are overwriting to place this hook
+			cmp edx, 100						// Capacity of the ring buffer, per player
+			jbe keepCalibrationSampleCount
+			mov edx, 100
+		keepCalibrationSampleCount:
+			mov dword ptr [ebx + 0x788], edx	// The code we are overwriting to place this hook
+
+			push offset Offsets::ptr_calibrationSampleCountClampJmpBck
+			jmp MemUtil::JumpToVersioned
+		}
+	}
+
+	/// <summary>
+	/// The input calibration screen sizes its volume averaging buffer to the current framerate (1.0 / delta time),
+	/// but the buffer is a fixed 100 floats per player. Above ~100 FPS the sampler writes past the end of it, and
+	/// the mean is then taken over more floats than the array holds, reading neighbouring members as if they were
+	/// samples. The mean never settles in the acceptance window, so the meter never fills and calibration cannot
+	/// be completed - which is why players on high refresh rate displays have to cap their framerate first.
+	/// Clamping that count to the real capacity fixes both the writes and the reads. Nothing at or below 100 FPS
+	/// changes; above it the averaging window just covers less time.
+	/// </summary>
+	void FixCalibrationSampleCount() {
+		MemUtil::PlaceHook(Offsets::ptr_calibrationSampleCountClamp, calibrationSampleCountClampHook, 10);
+
+		FlushInstructionCache(GetCurrentProcess(), (void*)Offsets::ptr_calibrationSampleCountClamp.Get(), 10);
+
+		LOG_INFO("(BUG PREVENTION) Fixed Calibration At High Framerates" << std::endl);
+	}
+
+	/// <summary>
+	/// Fixes crash when modifying functions in Rocksmith.
 	/// </summary>
 	void FixModifyingFunctions() {
 		uintptr_t forceSuccessLSBOffset = Offsets::ptr_ModdedPtrCrashFix.Get() + 0x3; // LSB of the MOV is what we are replacing

@@ -7,49 +7,46 @@ namespace CrowdControl::Effects { // Scales notes in a song to unusually small s
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus SmallNoteheadEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus SmallNoteheadEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("SmallNoteheadEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Set the scale of the noteheads to 0.5x
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus SmallNoteheadEffect::Start(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus SmallNoteheadEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("SmallNoteheadEffect::Start()" << std::endl);
-
-		if (!CanStart())
-			return EffectStatus::Retry;
 
 		SetNoteHeadScale(0.5);
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus SmallNoteheadEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus SmallNoteheadEffect::OnStop()
 	{
 		LOG_INFO("SmallNoteheadEffect::Stop()" << std::endl);
 
 		running = false;
 		SetNoteHeadScale(1);
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>

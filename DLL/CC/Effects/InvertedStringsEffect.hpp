@@ -6,12 +6,17 @@ namespace CrowdControl::Effects {
 	public:
 		explicit InvertedStringsEffect(int64_t durationMilliseconds) {
 			duration_ms = durationMilliseconds;
-
-			incompatibleEffects = { "removeinstrument" };
 		}
 
-		EffectStatus Test(const Request& request);
-		EffectStatus Start(const Request& request);
-		EffectStatus Stop();
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "string-colors" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request);
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request);
+		Enums::EffectStatus OnStop();
 	};
 }

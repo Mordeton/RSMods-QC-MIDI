@@ -57,6 +57,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ("Building: " + $solution + " [" + $Config + "|" + $Platform + "]")
+# Post-build events are disabled to avoid copying into a live Steam installation.
+# Seed the bundled GUI assets explicitly; the installer embeds these files at build time.
+$guiAssets = Join-Path $repoRoot "GUI\Lib"
+$guiResources = Join-Path $repoRoot "Installer\Resources\RSModsGUI"
+New-Item -ItemType Directory -Path $guiResources -Force | Out-Null
+Copy-Item -Path (Join-Path $guiAssets "*") -Destination $guiResources -Recurse -Force
+New-Item -ItemType Directory -Path (Join-Path $guiResources "CustomMods") -Force | Out-Null
 & $msbuild $solution /t:Build /p:Configuration=$Config /p:Platform=$Platform /p:PostBuildEventUseInBuild=false /m
 if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"

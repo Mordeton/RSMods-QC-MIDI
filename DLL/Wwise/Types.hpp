@@ -1,5 +1,11 @@
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windef.h>
+#include "MemoryMgr.hpp"
+
 /*
  Get documentation here: https://www.audiokinetic.com/library/2015.1.9_5624/?source=SDK&id=namespace_a_k_1_1_sound_engine.html
 
@@ -733,12 +739,12 @@ struct AkArrayAllocatorAlignedSimd
 {
 	AkForceInline void* Alloc(size_t in_uSize)
 	{
-		return AK::MemoryMgr::Malign(U_POOL::Get(), in_uSize, AK_SIMD_ALIGNMENT);
+		return Wwise::MemoryMgr::Malign(U_POOL::Get(), in_uSize, AK_SIMD_ALIGNMENT);
 	}
 
 	AkForceInline void Free(void* in_pAddress)
 	{
-		AK::MemoryMgr::Falign(U_POOL::Get(), in_pAddress);
+		Wwise::MemoryMgr::Falign(U_POOL::Get(), in_pAddress);
 	}
 
 	AkForceInline void TransferMem(void*& io_pDest, AkArrayAllocatorAlignedSimd<U_POOL> in_srcAlloc, void* in_pSrc)
@@ -781,9 +787,13 @@ struct AkPlacementNewKey
 
 #define AkPlacementNew(_memory) ::new( _memory, AkPlacementNewKey() )
 
-AkForceInline void* operator new(size_t /*size*/, void* memory, const AkPlacementNewKey& /*key*/) throw()
+AkForceInline void* operator new(size_t /*size*/, void* memory, const AkPlacementNewKey& /*key*/) noexcept
 {
 	return memory;
+}
+
+AkForceInline void operator delete(void* /*ptr*/, void* /*memory*/, const AkPlacementNewKey& /*key*/) noexcept
+{
 }
 
 #define AKASSERT(Condition) ((void)0)
@@ -1148,6 +1158,7 @@ public:
 	/// Resize the array.
 	bool GrowArray(AkUInt32 in_uGrowBy = TGrowBy)
 	{
+		(void)in_uGrowBy;
 		AKASSERT(in_uGrowBy);
 		return true;
 	}

@@ -1,5 +1,6 @@
 #include "../../stdafx.h"
 #include "KillMusicVolumeEffect.hpp"
+namespace Setting = Settings::Setting;
 
 namespace CrowdControl::Effects {
 	
@@ -7,15 +8,15 @@ namespace CrowdControl::Effects {
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus KillMusicVolumeEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus KillMusicVolumeEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("KillMusicVolumeEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
@@ -23,25 +24,22 @@ namespace CrowdControl::Effects {
 	/// The current volume is read by using Wwise_Sound_Query_GetRTPCValue_Char
 	/// New volume is set using Wwise_Sound_Query_SetRTPCValue_Char, the game calls it with both AK_INVALID_GAME_OBJECT and 0x1234 as object IDs 
 	/// </summary>
-	/// <returns> EffectStatus::Retry if we aren't currently in a song or the same effect is running already, or EffectStatus::Sucess if we are in a song</returns>
-	EffectStatus KillMusicVolumeEffect::Start(const Request& request)
+	/// <returns> Enums::EffectStatus::Retry if we aren't currently in a song or the same effect is running already, or Enums::EffectStatus::Success if we are in a song</returns>
+	Enums::EffectStatus KillMusicVolumeEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("KillMusicVolumeEffect::Start()" << std::endl);
 
-		if (!CanStart())
-			return EffectStatus::Retry;
-
 		RTPCValue_type type = RTPCValue_GameObject; // Save old volume
-		
-		Wwise::SoundEngine::Query::GetRTPCValue("Mixer_Music", AK_INVALID_GAME_OBJECT, &oldVolume, &type);
 
-		Wwise::SoundEngine::SetRTPCValue("Mixer_Music", 0.0f, AK_INVALID_GAME_OBJECT, 2000, AkCurveInterpolation_Linear);
-		Wwise::SoundEngine::SetRTPCValue("Mixer_Music", 0.0f, 0x1234, 2000, AkCurveInterpolation_Linear);
+		Wwise::SoundEngine::Query::GetRTPCValue(Setting::Channel::Music, AK_INVALID_GAME_OBJECT, &oldVolume, &type);
+
+		Wwise::SoundEngine::SetRTPCValue(Setting::Channel::Music, 0.0f, AK_INVALID_GAME_OBJECT, 2000, AkCurveInterpolation_Linear);
+		Wwise::SoundEngine::SetRTPCValue(Setting::Channel::Music, 0.0f, 0x1234, 2000, AkCurveInterpolation_Linear);
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
@@ -56,8 +54,8 @@ namespace CrowdControl::Effects {
 			// Start fadeout before effect actually stops
 			if (duration < std::chrono::milliseconds(2000) && !ending) {
 				// Restore volume
-				Wwise::SoundEngine::SetRTPCValue("Mixer_Music", oldVolume, AK_INVALID_GAME_OBJECT, 2000, AkCurveInterpolation_Linear);
-				Wwise::SoundEngine::SetRTPCValue("Mixer_Music", oldVolume, 0x1234, 2000, AkCurveInterpolation_Linear);
+				Wwise::SoundEngine::SetRTPCValue(Setting::Channel::Music, oldVolume, AK_INVALID_GAME_OBJECT, 2000, AkCurveInterpolation_Linear);
+				Wwise::SoundEngine::SetRTPCValue(Setting::Channel::Music, oldVolume, 0x1234, 2000, AkCurveInterpolation_Linear);
 				ending = true;
 			}
 
@@ -66,20 +64,20 @@ namespace CrowdControl::Effects {
 	}
 
 	/// <summary>
-	/// Restore the volume back to it's original values
+	/// Restore the volume back to its original values
 	/// </summary>
-	/// <returns> EffectStatus::Success</returns>
-	EffectStatus KillMusicVolumeEffect::Stop()
+	/// <returns> Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus KillMusicVolumeEffect::OnStop()
 	{
 		LOG_INFO("KillMusicVolumeEffect::Stop()" << std::endl);
 
 		// Make sure volume was set to original value by setting it immediately effective
-		Wwise::SoundEngine::SetRTPCValue("Mixer_Music", oldVolume, AK_INVALID_GAME_OBJECT, 2000, AkCurveInterpolation_Linear);
-		Wwise::SoundEngine::SetRTPCValue("Mixer_Music", oldVolume, 0x1234, 2000, AkCurveInterpolation_Linear);
+		Wwise::SoundEngine::SetRTPCValue(Setting::Channel::Music, oldVolume, AK_INVALID_GAME_OBJECT, 2000, AkCurveInterpolation_Linear);
+		Wwise::SoundEngine::SetRTPCValue(Setting::Channel::Music, oldVolume, 0x1234, 2000, AkCurveInterpolation_Linear);
 
 		running = false;
 		ending = false;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

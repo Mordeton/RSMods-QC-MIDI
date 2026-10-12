@@ -7,13 +7,18 @@ namespace CrowdControl::Effects {
 	public:
 		explicit RemoveNotesEffect(unsigned int durationMilliseconds) {
 			duration_ms = durationMilliseconds;
-
-			incompatibleEffects = { "transparentnotes", "bignoteheads", "smallnoteheads", "wavynotes"};
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
-		EffectStatus Stop() override;
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "note-visuals" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request) override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 
 	private:
 		static void ScaleNotes(float scale);

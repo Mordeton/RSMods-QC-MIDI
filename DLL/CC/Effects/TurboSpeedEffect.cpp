@@ -9,43 +9,40 @@ namespace CrowdControl::Effects {
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus TurboSpeedEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus TurboSpeedEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("TurboSpeedEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Set Riff Repeater speed to 200%.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus TurboSpeedEffect::Start(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus TurboSpeedEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("TurboSpeedEffect::Start()" << std::endl);
 
-		if (!CanStart())
-			return EffectStatus::Retry;
-		
 		RiffRepeater::SetSpeed(200.f, true);
 		RiffRepeater::EnableTimeStretch();
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus TurboSpeedEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus TurboSpeedEffect::OnStop()
 	{
 		LOG_INFO("TurboSpeedEffect::Stop()" << std::endl);
 
@@ -54,6 +51,6 @@ namespace CrowdControl::Effects {
 
 		running = false;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

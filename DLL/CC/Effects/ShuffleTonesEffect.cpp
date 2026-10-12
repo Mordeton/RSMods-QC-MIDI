@@ -1,5 +1,6 @@
 #include "../../stdafx.h"
 #include "ShuffleTonesEffect.hpp"
+#include "../../Keyboard.hpp"
 
 namespace CrowdControl::Effects { // Scales notes in a song to unusually small size TODO actually implement
 	
@@ -7,45 +8,42 @@ namespace CrowdControl::Effects { // Scales notes in a song to unusually small s
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus ShuffleTonesEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus ShuffleTonesEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("ShuffleTonesEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Shuffle the tone used by the player
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus ShuffleTonesEffect::Start(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus ShuffleTonesEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("ShuffleTonesEffect::Start()" << std::endl);
-
-		if (!CanStart())
-			return EffectStatus::Retry;
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Change the tone to a random (int) value 1-4
 	/// </summary>
 	void SwitchToneRand() {
-		static std::random_device rd;
-		static std::mt19937 rng(rd());
+		static std::random_device toneRd;
+		static std::mt19937 toneRng(toneRd());
 
 		std::uniform_int_distribution<> distrib(1, 4);
 
-		Util::SendKey(Settings::GetVKCodeForString(std::to_string(distrib(rng))));
+		Keyboard::SendKey(Settings::GetVKCodeForString(std::to_string(distrib(toneRng))));
 	}
 
 	/// <summary>
@@ -74,16 +72,16 @@ namespace CrowdControl::Effects { // Scales notes in a song to unusually small s
 	/// <summary>
 	/// Stops the mod by setting the tone back to the tone of the song.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus ShuffleTonesEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus ShuffleTonesEffect::OnStop()
 	{
 		LOG_INFO("ShuffleTonesEffect::Stop()" << std::endl);
 
 		running = false;
 
 		// Return to tone slot 1 at the end
-		Util::SendKey(Settings::GetVKCodeForString("1"));
+		Keyboard::SendKey(Settings::GetVKCodeForString("1"));
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

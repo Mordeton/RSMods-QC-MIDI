@@ -103,6 +103,7 @@ namespace RSMods
                     { ReadSettings.ExtendedRangeFixBassTuningIdentifier, CreateDefaultOnOldINI(ReadSettings.ExtendedRangeFixBassTuningIdentifier, "off") }, // Fix bad chart's tuning being wrong for strings 4 and 5.
                     { ReadSettings.CustomStringColorNumberIndetifier, CreateDefaultOnOldINI(ReadSettings.CustomStringColorNumberIndetifier, "0") }, // Custom String Colors (0 - Default, 1 - ZZ, 2 - Custom Colors)
                     { ReadSettings.SeparateNoteColorsIdentifier, CreateDefaultOnOldINI(ReadSettings.SeparateNoteColorsIdentifier, "off") }, // Should we use Separate Note Colors?
+                    { ReadSettings.UseExactColorsIdentifier, CreateDefaultOnOldINI(ReadSettings.UseExactColorsIdentifier, "off") }, // Shade custom string / note colors the way the game shades its own colors (off = original RSMods shading)
                     //{ ReadSettings.DiscoModeIdentifier, CreateDefaultOnOldINI(ReadSettings.DiscoModeIdentifier, "off") }, // Disco Mode Enabled / Disabled
                     { ReadSettings.RemoveHeadstockIdentifier, CreateDefaultOnOldINI(ReadSettings.RemoveHeadstockIdentifier, "off") }, // Remove Headstock Enabled / Disabled
                     { ReadSettings.RemoveSkylineIdentifier, CreateDefaultOnOldINI(ReadSettings.RemoveSkylineIdentifier, "off") }, // Remove Skyline Enabled / Disabled
@@ -135,7 +136,6 @@ namespace RSMods
                     { ReadSettings.OnScreenFontIdentifier, CreateDefaultOnOldINI(ReadSettings.OnScreenFontIdentifier, "Arial") }, // Font to use when we show text over Rocksmith
                     { ReadSettings.ProfileToLoadIdentifier, CreateDefaultOnOldINI(ReadSettings.ProfileToLoadIdentifier, "") }, // Default profile to load.
                     { ReadSettings.ShowSongTimerWhenIdentifier, CreateDefaultOnOldINI(ReadSettings.ShowSongTimerWhenIdentifier, "manual") }, // Should we start the game with song timer on.
-                    { ReadSettings.ShowSelectedVolumeWhenIdentifier, CreateDefaultOnOldINI(ReadSettings.ShowSelectedVolumeWhenIdentifier, "manual") }, // Should we always show the selected volume.
                     { ReadSettings.SecondaryMonitorIdentifier, CreateDefaultOnOldINI(ReadSettings.SecondaryMonitorIdentifier, "off")}, // Should we allow a secondary monitor to be used for Rocksmith?
                     { ReadSettings.RemoveSongPreviewsIdentifier, CreateDefaultOnOldINI(ReadSettings.RemoveSongPreviewsIdentifier, "off")}, // Should we disable the song previews for the user?
                     { ReadSettings.OverrideInputVolumeEnabledIdentifier, CreateDefaultOnOldINI(ReadSettings.OverrideInputVolumeEnabledIdentifier, "off")}, // Should we monitor to input volume of the user's cable to increase it above the default?
@@ -151,6 +151,9 @@ namespace RSMods
                     { ReadSettings.UseCustomNSPTimerIdentifier, CreateDefaultOnOldINI(ReadSettings.UseCustomNSPTimerIdentifier, "off") }, // Allows the user to have a custom timer for Non-stop Play instead of the 10.9 seconds that it defaults to.
                     { ReadSettings.DisplayCurrentAccuracyIdentifier, CreateDefaultOnOldINI(ReadSettings.DisplayCurrentAccuracyIdentifier, "off") },
                     { ReadSettings.PreventMidSongPauseIdentifier, CreateDefaultOnOldINI(ReadSettings.PreventMidSongPauseIdentifier, "off") },
+                    { ReadSettings.UltrawideIdentifier, CreateDefaultOnOldINI(ReadSettings.UltrawideIdentifier, "off") }, // Fills 21:9 / 32:9 displays: the 3D scene gains horizontal FOV (Hor+) while the HUD and menus stay 16:9. No-op on 16:9.
+                    { ReadSettings.RemoveFingerprintsIdentifier, CreateDefaultOnOldINI(ReadSettings.RemoveFingerprintsIdentifier, "off") },
+                    { ReadSettings.FastProfileLoadAndSaveIdentifier, CreateDefaultOnOldINI(ReadSettings.FastProfileLoadAndSaveIdentifier, "off") }, // Streams profile saves and loads so big profiles don't freeze or crash the game. Needs BackupProfile on.
                 }
             );
             saveSettingsOrDefaults.Add(
@@ -279,7 +282,7 @@ namespace RSMods
                     { ReadSettings.CustomGUIBackgroundColorIdentifier, CreateDefaultOnOldINI(ReadSettings.CustomGUIBackgroundColorIdentifier, "F0FFFF") }, // Custom Theme Background Color
                     { ReadSettings.CustomGUITextColorIdentifier, CreateDefaultOnOldINI(ReadSettings.CustomGUITextColorIdentifier, "000000") }, // Custom Theme Text Color
                     { ReadSettings.CustomGUIButtonColorIdentifier, CreateDefaultOnOldINI(ReadSettings.CustomGUIButtonColorIdentifier, "E3E3E3") }, // Custom Button Background Color
-                    { ReadSettings.BackupProfileIdentifier, CreateDefaultOnOldINI(ReadSettings.BackupProfileIdentifier, "on") }, // Should we backup profiles
+                    { ReadSettings.BackupProfileIdentifier, CreateDefaultOnOldINI(ReadSettings.BackupProfileIdentifier, "on") }, // Back up the profiles when the GUI opens, and every 10 minutes while the game runs (when they changed). Fast profile load/save needs this on.
                     { ReadSettings.NumberOfBackupsIdentifier, CreateDefaultOnOldINI(ReadSettings.NumberOfBackupsIdentifier, "50") }, // How many backups should we store before we start deleting them.
                 }
             );

@@ -1,15 +1,19 @@
 #pragma once
 
-#include "stdafx.h"
+#include <array>
+
+#include "Tuning.h"
 
 namespace SongTuning {
 	std::array<byte, 6> GetCurrentTuning(bool verbose = false);
 	bool IsExtendedRangeSong();
-	std::array<int, 2> GetHighestLowestString();
-	std::array<int, 2> GetHighestLowestString(Tuning tuningOverride);
+	std::array<int, 2> GetHighestLowestString(bool bass = false);
+	std::array<int, 2> GetHighestLowestString(Tuning tuningOverride, bool bass = false);
 	bool IsSongInDrop(Tuning tuning);
 	bool IsSongInStandard(Tuning tuning);
 	int GetTrueTuning();
-	Tuning GetTuningAtTuner();
+	void InstallTunerHook();
+	Tuning GetTuningAtTuner(bool logFailures = true);
+	bool IsPlayerOnBass();
 	bool IsExtendedRangeTuner();
 };

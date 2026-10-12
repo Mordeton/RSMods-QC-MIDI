@@ -11,9 +11,16 @@ namespace CrowdControl::Effects {
 		uint32_t tickIntervalMilliseconds = 2000;
 		std::chrono::steady_clock::time_point nextTickTime;
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "tone-slot" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request) override;
 		void Run() override;
-		EffectStatus Stop() override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 	};
 }

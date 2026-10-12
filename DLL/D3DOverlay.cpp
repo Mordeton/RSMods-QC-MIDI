@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "D3DOverlay.hpp"
 
+namespace Setting = Settings::Setting;
+
 /// <returns>Size of Rocksmith Window</returns>
 Resolution GameOverlay::GetWindowSize() {
 	RECT windowSize;
@@ -27,17 +29,17 @@ Resolution GameOverlay::GetWindowSize() {
 /// <param name="pDevice"> - Device Pointer</param>
 /// <param name="setFontSize"> - Override font size</param>
 /// <param name="format"> - DrawText format</param>
-void GameOverlay::DX9DrawText(const std::string& textToDraw, int textColorHex, int topLeftX, int topLeftY, int bottomRightX, int bottomRightY, LPDIRECT3DDEVICE9 pDevice, Resolution setFontSize, DWORD format)
+void GameOverlay::DX9DrawText(const std::string& textToDraw, int textColorHex, int topLeftX, int topLeftY, int bottomRightX, int bottomRightY, LPDIRECT3DDEVICE9 overlayDevice, Resolution setFontSize, DWORD format)
 {
 	CComPtr<ID3DXFont> font;
 	bool useInputFontSize = setFontSize.height != 0;
 
 	if (useInputFontSize) {
 		int targetH = setFontSize.height;
-		const std::string face = Settings::ReturnSettingValue("OnScreenFont");
+		const std::string face = Settings::ReturnSettingValue(Setting::OnScreenFont);
 		FontKey key = FontKey::Make(face, targetH, 0, FW_NORMAL, false);
 
-		if (!fontCache.Get(pDevice, key, font)) {
+		if (!fontCache.Get(overlayDevice, key, font)) {
 			LOG_ERROR("Could not acquire custom-sized font." << std::endl);
 			return;
 		}
@@ -61,17 +63,17 @@ void GameOverlay::DX9DrawText(const std::string& textToDraw, int textColorHex, i
 
 void GameOverlay::DisplayMixer() {
 	// Display the whole mixer if displayMixer is true
-	if (Settings::ReturnSettingValue("VolumeControlEnabled") == "on" && displayMixer) {
+	if (Settings::IsOn(Setting::VolumeControlEnabled) && displayMixer) {
 
 		float offset = 0;
-		for (int volumeIndex = 0; volumeIndex < mixerInternalNames.size(); ++volumeIndex) {
+		for (int volumeIndex = 0; volumeIndex < (int)mixerChannels.size(); ++volumeIndex) {
 
 			float volume = 0;
 			RTPCValue_type type = RTPCValue_GameObject;
-			Wwise::SoundEngine::Query::GetRTPCValue(mixerInternalNames[volumeIndex].c_str(), AK_INVALID_GAME_OBJECT, &volume, &type);
+			Wwise::SoundEngine::Query::GetRTPCValue(mixerChannels[volumeIndex].channel, AK_INVALID_GAME_OBJECT, &volume, &type);
 
 			DX9DrawText(
-				drawMixerTextName[volumeIndex] + std::to_string(static_cast<int>(volume)) + "%",
+				std::string(mixerChannels[volumeIndex].label) + std::to_string(static_cast<int>(volume)) + "%",
 				whiteText,
 				static_cast<int>(WindowSize.width / 96.0f),  // 20 pixels from left in 1920x1080 resolution
 				static_cast<int>(WindowSize.height / 54.0f + offset), // 20 pixels from top (plus an offset to display multiple values)
@@ -84,13 +86,13 @@ void GameOverlay::DisplayMixer() {
 		}
 	}
 	// Display just the current volume based on context (This will display the last volume that was adjusted for a few seconds after adjusting it)
-	else if (Settings::ReturnSettingValue("VolumeControlEnabled") == "on" && displayCurrentVolume) {
+	else if (Settings::IsOn(Setting::VolumeControlEnabled) && displayCurrentVolume) {
 		float volume = 0;
 		RTPCValue_type type = RTPCValue_GameObject;
-		Wwise::SoundEngine::Query::GetRTPCValue(mixerInternalNames[currentVolumeIndex].c_str(), AK_INVALID_GAME_OBJECT, &volume, &type);
+		Wwise::SoundEngine::Query::GetRTPCValue(mixerChannels[currentVolumeIndex].channel, AK_INVALID_GAME_OBJECT, &volume, &type);
 
 		DX9DrawText(
-			drawMixerTextName[currentVolumeIndex] + std::to_string(static_cast<int>(volume)) + "%",
+			std::string(mixerChannels[currentVolumeIndex].label) + std::to_string(static_cast<int>(volume)) + "%",
 			whiteText,
 			static_cast<int>(WindowSize.width / 96.0f),  // 20 pixels from left in 1920x1080 resolution
 			static_cast<int>(WindowSize.height / 54.0f), // 20 pixels from top 
@@ -118,7 +120,7 @@ void GameOverlay::DisplaySongTimer()
 
 void GameOverlay::DisplayCurrentNote()
 {
-	if (Settings::ReturnSettingValue("ShowCurrentNoteOnScreen") == "on" && GuitarSpeak::GetCurrentNoteName() != (std::string)"") {
+	if (Settings::IsOn(Setting::ShowCurrentNoteOnScreen) && GuitarSpeak::GetCurrentNoteName() != (std::string)"") {
 
 		if (GameState::IsInSong()) {
 			DX9DrawText(
@@ -145,7 +147,7 @@ void GameOverlay::DisplayCurrentNote()
 
 void GameOverlay::DisplayRiffRepeaterOverHundredPercentSpeed()
 {
-	if (Settings::ReturnSettingValue("RRSpeedAboveOneHundred") == "on" && RiffRepeater::loggedCurrentSongID &&
+	if (Settings::IsOn(Setting::RRSpeedAboveOneHundred) && RiffRepeater::loggedCurrentSongID &&
 		(GameState::Menus::IsInModesWithAllowedFastRiffRepeater() || GameState::Menus::IsOnScoreScreens()) || RiffRepeater::currentlyEnabled_Above100) {
 		realSongSpeed = RiffRepeater::GetSpeed(true); // While this should almost always be the same value, the user might enable riff repeater, which could cause this number to be wrong.
 
@@ -164,7 +166,7 @@ void GameOverlay::DisplayRiffRepeaterOverHundredPercentSpeed()
 
 void GameOverlay::DisplayCurrentTuningForAutoTune()
 {
-	if (Settings::ReturnSettingValue("AutoTuneForSong") == "on" && Settings::GetKeyBind("TuningOffsetKey") != NULL && GameState::Menus::IsInTuningMenus()) {
+	if (Settings::IsOn(Setting::AutoTuneForSong) && Settings::GetKeyBind(Setting::Key::TuningOffset) != NULL && GameState::Menus::IsInTuningMenus()) {
 		DX9DrawText(
 			"Auto Tune For: " + Midi::GetTuningOffsetName(Midi::tuningOffset),
 			whiteText,
@@ -191,17 +193,17 @@ void GameOverlay::DisplayLoopStartEndTimes(float loopStart, float loopEnd)
 }
 
 void HandleLooping() {
-	if (Settings::ReturnSettingValue("AllowLooping") == "on" && (Keybindings::loopStart != NULL || Keybindings::loopEnd != NULL)) {
+	if (Settings::IsOn(Setting::AllowLooping) && (Keybindings::loopStart != NULL || Keybindings::loopEnd != NULL)) {
 		// Only enable looping in learn a song modes (learn a song & non-stop play)
 		if (GameState::Menus::IsInLearnASongModes()) {
 			GameOverlay::DisplayLoopStartEndTimes(Keybindings::loopStart, Keybindings::loopEnd);
 
 			// Prevent the user from creating a loop that starts at a negative timestamp.
-			if ((Settings::GetModSetting("LoopingLeadUp") / 1000.f) >= Keybindings::loopStart) {
+			if ((Settings::GetModSetting(Setting::LoopingLeadUp) / 1000.f) >= Keybindings::loopStart) {
 				Keybindings::roughLoopStart = 0.f;
 			}
 			else {
-				Keybindings::roughLoopStart = Keybindings::loopStart - (Settings::GetModSetting("LoopingLeadUp") / 1000.f);
+				Keybindings::roughLoopStart = Keybindings::loopStart - (Settings::GetModSetting(Setting::LoopingLeadUp) / 1000.f);
 			}
 
 			// If we are paused, reset the grey note timer.
@@ -269,7 +271,7 @@ static float ReadAccuracy() {
 }
 
 void GameOverlay::DisplaySongAccuracy() {
-	if (Settings::ReturnSettingValue("DisplayCurrentAccuracy") == "on" &&
+	if (Settings::IsOn(Setting::DisplayCurrentAccuracy) &&
 		GameState::IsInSong() && SongTimer::SongTimer() != 0.f) {
 		auto left = static_cast<int>(WindowSize.width - WindowSize.width / 16.0f);
 		auto right = static_cast<int>(WindowSize.width - WindowSize.width / 96.0f);
@@ -305,8 +307,8 @@ void GameOverlay::DisplaySongAccuracy() {
 }
 
 void GameOverlay::CheckCurrentFont() {
-	const std::string currentFontName = Settings::ReturnSettingValue("OnScreenFont");
-	const int currentFontSize = Settings::GetModSetting("OnScreenFontSize");
+	const std::string currentFontName = Settings::ReturnSettingValue(Setting::OnScreenFont);
+	const int currentFontSize = Settings::GetModSetting(Setting::OnScreenFontSize);
 
 	if (cachedFontName != currentFontName || cachedFontSize != currentFontSize || !cachedFont) {
 		LOG_INFO("Font settings changed. Re-caching default font..." << std::endl);
@@ -323,6 +325,21 @@ void GameOverlay::CheckCurrentFont() {
 			LOG_ERROR("Failed to create and cache new default font!" << std::endl);
 		}
 	}
+}
+
+// ID3DXFont holds a D3DPOOL_DEFAULT glyph atlas that must be released before an
+// IDirect3DDevice9::Reset and rebuilt after, or draws through it corrupt the frame once
+// the device is back (the Alt+Tab white-screen when "show current note" had drawn a glyph).
+void GameOverlay::OnLostDevice() {
+	if (DX9FontEncapsulation)
+		DX9FontEncapsulation->OnLostDevice();
+	fontCache.OnLostDevice();
+}
+
+void GameOverlay::OnResetDevice() {
+	if (DX9FontEncapsulation)
+		DX9FontEncapsulation->OnResetDevice();
+	fontCache.OnResetDevice();
 }
 
 void GameOverlay::RenderOverlay(IDirect3DDevice9* device) {

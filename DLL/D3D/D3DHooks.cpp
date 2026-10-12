@@ -1,5 +1,89 @@
 #include "../stdafx.h"
 #include "D3DHooks.hpp"
+#include "../Framework/Framework.hpp"
+#include "../D3DOverlay.hpp"
+#include "../AspectRatio.hpp"
+#include "UltrawideShaders.hpp"
+#include "UltrawideFullStage.hpp"
+#include "../Mods/UltrawideMod.hpp"
+
+using Settings::NoteColorMode;
+namespace Setting = Settings::Setting;
+
+namespace {
+	/// <summary>
+	/// Every setting the draw hooks read. A settings read takes a lock and does a map lookup,
+	/// and the draw hooks made about a dozen per draw, so they read this copy instead. It is
+	/// re-read only when the settings generation moves, so a change still lands on the next draw.
+	/// </summary>
+	struct DrawSettings {
+		unsigned int generation = 0; // Settings generations start at 1, so the first draw always reads.
+
+		bool extendedRangeMissing = false; // See the self-heal in Hook_DIP.
+		bool removeFingerprints = false;
+		bool customHighwayColors = false;
+		bool customHighwayLanes = false; // Both the numbered and un-numbered lane colors are set.
+		bool customFretNumbers = false;
+		bool customHighwayGutter = false;
+		NoteColorMode noteColorMode = NoteColorMode::Default;
+		bool separateNoteColors = false;
+		bool useExactColors = false;
+		bool solidNoteColorRandom = false;
+		bool greenScreenWall = false;
+		bool fretless = false;
+		bool removeInlays = false;
+		bool removeLaneMarkers = false;
+		bool removeLyrics = false;
+		bool removeHeadstock = false;
+
+		bool twitchRemoveNotes = false;
+		bool twitchTransparentNotes = false;
+		bool twitchSolidNotes = false;
+		bool twitchFYourFC = false;
+		bool twitchDrunkMode = false;
+	};
+
+	/// <summary>
+	/// The draw hooks' copy of the settings, refreshed if a write happened since it was taken.
+	/// Per thread, so a draw issued off the render thread can't race the refresh.
+	/// </summary>
+	const DrawSettings& CurrentDrawSettings() {
+		thread_local DrawSettings cached;
+
+		// Read the generation before the values: a write that lands in between leaves the
+		// generation newer than the one stored here, so the next draw reads again.
+		const unsigned int generation = Settings::Generation();
+		if (cached.generation == generation)
+			return cached;
+
+		cached.extendedRangeMissing = Settings::ReturnSettingValue(Setting::ExtendedRangeEnabled).length() < 2;
+		cached.removeFingerprints = Settings::IsOn(Setting::RemoveFingerprints);
+		cached.customHighwayColors = Settings::IsOn(Setting::CustomHighwayColors);
+		cached.customHighwayLanes = !Settings::ReturnNotewayColor("CustomHighwayNumbered").empty()
+			&& !Settings::ReturnNotewayColor("CustomHighwayUnNumbered").empty();
+		cached.customFretNumbers = !Settings::ReturnNotewayColor("CustomFretNubmers").empty();
+		cached.customHighwayGutter = !Settings::ReturnNotewayColor("CustomHighwayGutter").empty();
+		cached.noteColorMode = Settings::GetNoteColorMode();
+		cached.separateNoteColors = Settings::IsOn(Setting::SeparateNoteColors);
+		cached.useExactColors = Settings::IsOn(Setting::UseExactColors);
+		cached.solidNoteColorRandom = Settings::ReturnSettingValue(Setting::SolidNoteColor) == "random";
+		cached.greenScreenWall = Settings::IsOn(Setting::GreenScreenWallEnabled);
+		cached.fretless = Settings::IsOn(Setting::FretlessModeEnabled);
+		cached.removeInlays = Settings::IsOn(Setting::RemoveInlaysEnabled);
+		cached.removeLaneMarkers = Settings::IsOn(Setting::RemoveLaneMarkersEnabled);
+		cached.removeLyrics = Settings::IsOn(Setting::RemoveLyricsEnabled);
+		cached.removeHeadstock = Settings::IsOn(Setting::RemoveHeadstockEnabled);
+
+		cached.twitchRemoveNotes = Settings::IsTwitchSettingEnabled(Setting::Twitch::RemoveNotes);
+		cached.twitchTransparentNotes = Settings::IsTwitchSettingEnabled(Setting::Twitch::TransparentNotes);
+		cached.twitchSolidNotes = Settings::IsTwitchSettingEnabled(Setting::Twitch::SolidNotes);
+		cached.twitchFYourFC = Settings::IsTwitchSettingEnabled(Setting::Twitch::FYourFC);
+		cached.twitchDrunkMode = Settings::IsTwitchSettingEnabled(Setting::Twitch::DrunkMode);
+
+		cached.generation = generation;
+		return cached;
+	}
+}
 
 /// <summary>
 /// IDirect3DDevice9::DrawPrimitive Middleware. Mainly used for Note Tails
@@ -10,38 +94,34 @@
 /// <param name="PrimCount"> - Number of primitives to render.</param>
 /// <returns>If the method succeeds, the return value is D3D_OK. If the method fails, the return value can be D3DERR_INVALIDCALL.</returns>
 HRESULT APIENTRY D3DHooks::Hook_DP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, UINT StartIndex, UINT PrimCount) { // Mainly used for Note Tails
-	if (pDevice->GetStreamSource(0, &Stream_Data, &Offset, &Stride) == D3D_OK)
-		Stream_Data->Release();
+	const DrawSettings& settings = CurrentDrawSettings();
+
+	UltrawideShaders::DrawScope ultrawideScope(pDevice, PrimCount);
+	ultrawideScope.Apply();
 
 	// Note-tails for Extended Range / Custom Colors
 	if (ERMode::AttemptedERInThisSong && ERMode::UseEROrColorsInThisSong && NOTE_TAILS) {
 		GameState::ToggleCB(ERMode::UseERExclusivelyInThisSong);
 
-		switch (Settings::GetModSetting("SeparateNoteColors")) {
-			case 0: // Use same color scheme on notes as we do on strings
-				pDevice->SetTexture(1, customStringColorTexture);
-				break;
-			case 1: // Default Colors, so don't do anything.
-				break;
-			case 2: // Use Custom Note Color Scheme
-				pDevice->SetTexture(1, customNoteColorTexture);
-				break;
-			default:
-				break;
-		}
+		// Same rule as the note heads in Hook_DIP. SeparateNoteColors is an on/off toggle, so it can't be read as the mode.
+		if (settings.noteColorMode == NoteColorMode::SameAsStrings)
+			pDevice->SetTexture(1, customStringColorTexture);
+		else if (settings.separateNoteColors && settings.noteColorMode == NoteColorMode::Custom)
+			pDevice->SetTexture(1, customNoteColorTexture);
+		// NoteColorMode::Default: leave the game's texture alone.
 	}
 
 	// Note-tails for Twitch mod - Remove Notes.
-	if (Settings::IsTwitchSettingEnabled("RemoveNotes") && NOTE_TAILS)
+	if (settings.twitchRemoveNotes && NOTE_TAILS)
 		return REMOVE_TEXTURE;
 
 	// Note-tails for Twitch mod - Transparent Notes.
-	if (Settings::IsTwitchSettingEnabled("TransparentNotes") && NOTE_TAILS)
+	if (settings.twitchTransparentNotes && NOTE_TAILS)
 		pDevice->SetTexture(1, nonexistentTexture);
 
 	// Note-tails for Twitch mod - Solid Colored notes.
-	if (Settings::IsTwitchSettingEnabled("SolidNotes") && NOTE_TAILS) {
-		if (Settings::ReturnSettingValue("SolidNoteColor") == "random")
+	if (settings.twitchSolidNotes && NOTE_TAILS) {
+		if (settings.solidNoteColorRandom)
 			pDevice->SetTexture(1, randomTextures[currentRandomTexture]);
 		else
 			pDevice->SetTexture(1, twitchUserDefinedTexture);
@@ -53,6 +133,31 @@ HRESULT APIENTRY D3DHooks::Hook_DP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE P
 
 	// Call the original DrawPrimitive.
 	return oDrawPrimitive(pDevice, PrimType, StartIndex, PrimCount);
+}
+
+/// <summary>
+/// IDirect3DDevice9::DrawPrimitiveUP Middleware. Exists so the ultrawide correction covers every
+/// draw entry point; the game's own behaviour passes through untouched.
+/// </summary>
+HRESULT APIENTRY D3DHooks::Hook_DrawPrimitiveUP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, UINT PrimCount, const void* pVertexStreamZeroData, UINT VertexStreamZeroStride) {
+	UltrawideShaders::DrawScope ultrawideScope(pDevice, PrimCount);
+	ultrawideScope.Apply();
+
+	const HRESULT result = oDrawPrimitiveUP(pDevice, PrimType, PrimCount, pVertexStreamZeroData, VertexStreamZeroStride);
+	Stride = 0; // The UP draws leave stream 0 unbound (NULL, stride 0) without calling SetStreamSource.
+	return result;
+}
+
+/// <summary>
+/// IDirect3DDevice9::DrawIndexedPrimitiveUP Middleware. See Hook_DrawPrimitiveUP.
+/// </summary>
+HRESULT APIENTRY D3DHooks::Hook_DrawIndexedPrimitiveUP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, UINT MinVertexIndex, UINT NumVertices, UINT PrimCount, const void* pIndexData, D3DFORMAT IndexDataFormat, const void* pVertexStreamZeroData, UINT VertexStreamZeroStride) {
+	UltrawideShaders::DrawScope ultrawideScope(pDevice, PrimCount);
+	ultrawideScope.Apply();
+
+	const HRESULT result = oDrawIndexedPrimitiveUP(pDevice, PrimType, MinVertexIndex, NumVertices, PrimCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+	Stride = 0; // See Hook_DrawPrimitiveUP.
+	return result;
 }
 
 /// <summary>
@@ -88,19 +193,161 @@ HRESULT APIENTRY D3DHooks::Hook_SetVertexShaderConstantF(LPDIRECT3DDEVICE9 pDevi
 }
 
 /// <summary>
+/// Refresh the ultrawide correction state. Called once per frame from Hook_EndScene, so the
+/// per-constant-upload path never has to touch Settings or query the swap chain.
+/// </summary>
+void D3DHooks::UpdateUltrawideState(IDirect3DDevice9* pDevice) {
+	// Only widen. A narrower-than-16:9 display gives a scale above 1.0, which would push the
+	// camera frustum and the remapped viewport outside the backbuffer, so the mod stays inert.
+	const bool active = ultrawideSettingOn.load(std::memory_order_relaxed)
+		&& ultrawideBackBufferValid && AspectRatio::IsWiderThanReference(ultrawideClipXScale);
+
+	ultrawideActive.store(active, std::memory_order_relaxed);
+
+	// Once per frame: the query compares strings, and the draw path reads the
+	// result per draw.
+	ultrawideInGuitarcade.store(GameState::Menus::IsInGuitarcadeGame(), std::memory_order_relaxed);
+	ultrawideInVideoPlayer.store(GameState::currentMenu == "VideoPlayer", std::memory_order_relaxed);
+	// Full-stage bitmaps: the title backdrop is widened on the title screens (the "connecting"
+	// SelectionListDialog included, the loft is not up yet there) and dropped under the
+	// sign-in dialogs.
+	UltrawideFullStage::onTitle.store(GameState::currentMenu.empty() || GameState::currentMenu == "pre_enter_prompt"
+		|| GameState::currentMenu == "TitleScreen" || GameState::currentMenu == "SelectionListDialog", std::memory_order_relaxed);
+
+	// Publish the backbuffer aspect only while the correction applies. Otherwise the game must
+	// keep building its stock 16:9 frustum: the viewport and HUD paths are inert on a display
+	// the gate rejected, and a camera that follows the display alone would drift from them.
+	const double displayAspect = active && ultrawideBackBufferHeight
+		? static_cast<double>(ultrawideBackBufferWidth) / ultrawideBackBufferHeight
+		: AspectRatio::referenceAspect;
+	UltrawideMod::SetDisplayAspect(displayAspect);
+
+	if (ultrawideBackBufferValid || !pDevice)
+		return;
+
+	IDirect3DSwapChain9* swapChain = nullptr;
+	if (FAILED(pDevice->GetSwapChain(0, &swapChain)) || !swapChain)
+		return;
+
+	D3DPRESENT_PARAMETERS presentParameters{};
+	if (SUCCEEDED(swapChain->GetPresentParameters(&presentParameters))
+		&& presentParameters.BackBufferWidth && presentParameters.BackBufferHeight) {
+
+		ultrawideClipXScale = AspectRatio::ClipXScale(presentParameters.BackBufferWidth, presentParameters.BackBufferHeight);
+		ultrawideBackBufferWidth = presentParameters.BackBufferWidth;
+		ultrawideBackBufferHeight = presentParameters.BackBufferHeight;
+		ultrawideBackBufferValid = true;
+
+		// Stage verdicts compare a target's size against the backbuffer aspect, so any cached
+		// before this point was known was decided on the wrong comparison.
+		UltrawideShaders::TextureStages::Invalidate();
+	}
+
+	swapChain->Release();
+}
+
+/// <summary>
+/// IDirect3DDevice9::StretchRect Middleware.
+/// </summary>
+HRESULT APIENTRY D3DHooks::Hook_StretchRect(LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9* pSourceSurface, const RECT* pSourceRect, IDirect3DSurface9* pDestSurface, const RECT* pDestRect, D3DTEXTUREFILTERTYPE Filter) {
+	// The video player composites its frame through the same path at its own aspect; leave it.
+	if (ultrawideActive.load(std::memory_order_relaxed) && !ultrawideInVideoPlayer.load(std::memory_order_relaxed)
+		&& pDestRect && pDestSurface) {
+		D3DSURFACE_DESC destinationDescription{};
+
+		if (SUCCEEDED(pDestSurface->GetDesc(&destinationDescription))) {
+			const AspectRatio::Rect destination{ pDestRect->left, pDestRect->top, pDestRect->right, pDestRect->bottom };
+			AspectRatio::Rect widened{};
+
+			if (AspectRatio::WidenLetterbox(destination, destinationDescription.Width, destinationDescription.Height, widened)) {
+				const RECT widenedRect{ widened.left, widened.top, widened.right, widened.bottom };
+
+				return oStretchRect(pDevice, pSourceSurface, pSourceRect, pDestSurface, &widenedRect, Filter);
+			}
+		}
+	}
+
+	return oStretchRect(pDevice, pSourceSurface, pSourceRect, pDestSurface, pDestRect, Filter);
+}
+
+// IDirect3DDevice9::SetTexture Middleware. Records the binding for the ultrawide texture-stage
+// mirror; classification happens lazily on the draw path.
+HRESULT APIENTRY D3DHooks::Hook_SetTexture(LPDIRECT3DDEVICE9 pDevice, DWORD Stage, IDirect3DBaseTexture9* pTexture) {
+	// Bind first, mirror after: a rejected bind leaves the device on its previous texture.
+	const HRESULT result = oSetTexture(pDevice, Stage, pTexture);
+	if (SUCCEEDED(result))
+		UltrawideShaders::TextureStages::OnTextureBound(Stage, pTexture);
+
+	return result;
+}
+
+/// <summary>
+/// IDirect3DDevice9::SetRenderTarget Middleware. Tracks whether the scene target is bound, so the
+/// aspect correction can confine itself to draws that actually reach the screen.
+/// </summary>
+HRESULT APIENTRY D3DHooks::Hook_SetRenderTarget(LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9* pRenderTarget) {
+	// Bind first, classify after: a rejected target keeps the previous one bound, and the draw
+	// path must keep reading that one's classification.
+	const HRESULT result = oSetRenderTarget(pDevice, RenderTargetIndex, pRenderTarget);
+
+	if (RenderTargetIndex == 0 && SUCCEEDED(result)) {
+
+		// One GetDesc serves both the render-target registry below and the scene test after it.
+		D3DSURFACE_DESC targetDescription{};
+		const bool haveDescription = pRenderTarget && SUCCEEDED(pRenderTarget->GetDesc(&targetDescription));
+
+		if (haveDescription) {
+			IDirect3DTexture9* container = nullptr;
+			if (SUCCEEDED(pRenderTarget->GetContainer(__uuidof(IDirect3DTexture9), reinterpret_cast<void**>(&container))) && container) {
+				const auto existing = ultrawideRenderTargetTextures.find(container);
+				const std::pair<UINT, UINT> size{ targetDescription.Width, targetDescription.Height };
+
+				// A texture only just discovered to be a render target may already be sitting in a
+				// texture stage classified as an ordinary texture, so retire the cached verdicts.
+				if (existing == ultrawideRenderTargetTextures.end() || existing->second != size) {
+					ultrawideRenderTargetTextures[container] = size;
+					UltrawideShaders::TextureStages::Invalidate();
+				}
+
+				container->Release();
+			}
+		}
+
+		bool isScene = false;
+		UINT width = 0;
+		UINT height = 0;
+
+		if (haveDescription && ultrawideBackBufferValid) {
+			width = targetDescription.Width;
+			height = targetDescription.Height;
+
+			isScene = AspectRatio::SameAspect(width, height, ultrawideBackBufferWidth, ultrawideBackBufferHeight);
+		}
+
+		ultrawideRenderTargetIsScene = isScene;
+		ultrawideRenderTargetWidth = width;
+		ultrawideRenderTargetHeight = height;
+	}
+
+	return result;
+}
+
+/// <summary>
 /// IDirect3DDevice9::SetVertexShader Middleware.
 /// </summary>
 /// <param name="pDevice"> - Device Pointer</param>
 /// <param name="veShader"> - Vertex shader interface.</param>
 /// <returns>If the method succeeds, the return value is D3D_OK. If the method fails, the return value can be D3DERR_INVALIDCALL.</returns>
 HRESULT APIENTRY D3DHooks::Hook_SetVertexShader(LPDIRECT3DDEVICE9 pDevice, IDirect3DVertexShader9* veShader) {
-	if (veShader != NULL) {
+	if (veShader != NULL)
 		vShader = veShader;
-		vShader->GetFunction(NULL, &vSize);
-	}
-	
-	// Call the original SetVertexShader.
-	return oSetVertexShader(pDevice, veShader);
+
+	// Bind first, publish after: a rejected bind leaves the previous shader current.
+	const HRESULT result = oSetVertexShader(pDevice, veShader);
+	if (SUCCEEDED(result))
+		UltrawideShaders::OnVertexShaderBound(veShader);
+
+	return result;
 }
 
 /// <summary>
@@ -110,10 +357,8 @@ HRESULT APIENTRY D3DHooks::Hook_SetVertexShader(LPDIRECT3DDEVICE9 pDevice, IDire
 /// <param name="piShader"> - Pixel shader interface.</param>
 /// <returns>If the method succeeds, the return value is D3D_OK. If the method fails, the return value can be D3DERR_INVALIDCALL.</returns>
 HRESULT APIENTRY D3DHooks::Hook_SetPixelShader(LPDIRECT3DDEVICE9 pDevice, IDirect3DPixelShader9* piShader) {
-	if (piShader != NULL) {
+	if (piShader != NULL)
 		pShader = piShader;
-		pShader->GetFunction(NULL, &pSize);
-	}
 
 	// Call the original SetPixelShader.
 	return oSetPixelShader(pDevice, piShader);
@@ -138,7 +383,30 @@ HRESULT APIENTRY D3DHooks::Hook_SetStreamSource(LPDIRECT3DDEVICE9 pDevice, UINT 
 	}
 
 	// Call original SetStreamSource.
-	return oSetStreamSource(pDevice, StreamNumber, pStreamData, OffsetInBytes, i_Stride);
+	const HRESULT result = oSetStreamSource(pDevice, StreamNumber, pStreamData, OffsetInBytes, i_Stride);
+
+	// Mirror stream 0's stride for the draw hooks' mesh matching, so they don't read it back
+	// from the device on every draw.
+	if (StreamNumber == 0 && SUCCEEDED(result))
+		Stride = i_Stride;
+
+	return result;
+}
+
+/// <summary>
+/// Re-read stream 0's stride from the device. The mirror kept by Hook_SetStreamSource misses
+/// state-block restores (ImGui and ID3DXFont both use them), so this runs once per frame after
+/// our own overlay drawing, and after a Reset.
+/// </summary>
+void D3DHooks::SyncStreamSourceMirror(IDirect3DDevice9* pDevice) {
+	IDirect3DVertexBuffer9* streamData = nullptr;
+	UINT offset = 0, stride = 0;
+
+	if (SUCCEEDED(pDevice->GetStreamSource(0, &streamData, &offset, &stride))) {
+		Stride = stride;
+		if (streamData)
+			streamData->Release();
+	}
 }
 
 /// <summary>
@@ -148,21 +416,26 @@ HRESULT APIENTRY D3DHooks::Hook_SetStreamSource(LPDIRECT3DDEVICE9 pDevice, UINT 
 /// <param name="pPresentationParameters"> - Pointer to a D3DPRESENT_PARAMETERS structure, describing the new presentation parameters. This value cannot be NULL.</param>
 /// <returns>Possible return values include: D3D_OK, D3DERR_DEVICELOST, D3DERR_DEVICEREMOVED, D3DERR_DRIVERINTERNALERROR, or D3DERR_OUTOFVIDEOMEMORY.</returns>
 HRESULT APIENTRY D3DHooks::Hook_Reset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters) {
-	// Lost Device
+	// Lost Device - release device-dependent resources before Reset.
 	ImGui_ImplDX9_InvalidateDeviceObjects();
-
-	if (GameOverlay::DX9FontEncapsulation)
-		GameOverlay::DX9FontEncapsulation->OnLostDevice();
-	GameOverlay::fontCache.OnLostDevice();
+	GameOverlay::OnLostDevice();
 
 	// Reset Device. Call original Reset.
 	HRESULT ResetReturn = oReset(pDevice, pPresentationParameters);
 
-	ImGui_ImplDX9_CreateDeviceObjects();
+	// Only recreate device objects once the device is actually back. If Reset failed
+	// (e.g. still D3DERR_DEVICELOST mid-Alt+Tab out of exclusive fullscreen), the game
+	// retries Reset next frame; recreating against a lost device leaves a broken frame.
+	if (SUCCEEDED(ResetReturn)) {
+		ImGui_ImplDX9_CreateDeviceObjects();
+		GameOverlay::OnResetDevice();
 
-	if (GameOverlay::DX9FontEncapsulation)
-		GameOverlay::DX9FontEncapsulation->OnResetDevice();
-	GameOverlay::fontCache.OnResetDevice();
+		ultrawideBackBufferValid = false; // Resolution may have changed; recompute the scale lazily.
+		ultrawideRenderTargetTextures.clear(); // Targets are recreated after a reset; stale pointers must not match new textures.
+		UltrawideShaders::Forget(); // Same hazard: shaders are released across a reset too.
+		UltrawideShaders::TextureStages::Forget(); // Textures are released too, and the stage mirror is keyed by raw pointer as well.
+		SyncStreamSourceMirror(pDevice); // Reset unbinds the streams.
+	}
 
 	return ResetReturn;
 }
@@ -181,16 +454,61 @@ HRESULT APIENTRY D3DHooks::Hook_Reset(IDirect3DDevice9* pDevice, D3DPRESENT_PARA
 HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT StartIndex, UINT PrimCount) { // Draw things on screen
 	static bool calculatedCRC = false, calculatedHeadstocks = false, calculatedSkyline = false;
 
-	if (pDevice->GetStreamSource(0, &Stream_Data, &Offset, &Stride) == D3D_OK)
-		Stream_Data->Release();
+	const DrawSettings& settings = CurrentDrawSettings();
+
+	#ifdef _DEBUG
+	// The stride comes from Hook_SetStreamSource's mirror. Check it against the device so a
+	// state change the mirror missed shows up in the log instead of as a mis-matched mesh.
+	{
+		IDirect3DVertexBuffer9* streamData = nullptr;
+		UINT offset = 0, deviceStride = 0;
+		if (SUCCEEDED(pDevice->GetStreamSource(0, &streamData, &offset, &deviceStride))) {
+			if (streamData)
+				streamData->Release();
+
+			static bool reportedStrideMismatch = false;
+			if (deviceStride != Stride && !reportedStrideMismatch) {
+				reportedStrideMismatch = true;
+				LOG_WARNING("Stream 0 stride mirror is stale: mirror " << Stride << ", device " << deviceStride << std::endl);
+			}
+		}
+	}
+	#endif
+
+	UltrawideShaders::DrawScope ultrawideScope(pDevice, PrimCount);
+	ultrawideScope.Apply();
+
+	// Full-stage bitmaps: the dim plate and the title backdrop are widened over the whole
+	// backbuffer, the backdrops dropped under the sign-in dialogs. Confined draws only, so
+	// inert at 16:9.
+	{
+		const auto decision = UltrawideFullStage::Decide(pDevice, PrimCount, ultrawideScope.Confined());
+		switch (decision) {
+		case UltrawideFullStage::Decision::Skip:
+			return D3D_OK;
+		case UltrawideFullStage::Decision::Stretch:
+		case UltrawideFullStage::Decision::StretchWide: {
+			UltrawideFullStage::StretchViewport(pDevice, ultrawideBackBufferWidth,
+				decision == UltrawideFullStage::Decision::Stretch);
+			const HRESULT stretched = oDrawIndexedPrimitive(pDevice, PrimType, BaseVertexIndex, MinVertexIndex, NumVertices, StartIndex, PrimCount);
+			UltrawideFullStage::Restore(pDevice);
+			return stretched;
+		}
+		default:
+			break;
+		}
+	}
 
 	// This could potentially lead to game locking up (because DIP is called multiple times per frame) if that value is not filled, but generally it should work 
-	if (Settings::ReturnSettingValue("ExtendedRangeEnabled").length() < 2) { // Due to some weird reasons, sometimes settings decide to go missing - this may solve the problem
-		Settings::UpdateSettings();
-		D3D::GenerateTextures(pDevice, D3D::Strings);
-		D3D::GenerateTextures(pDevice, D3D::Notes);
-		D3D::GenerateTextures(pDevice, D3D::Rainbow);
-		LOG_INFO("Reloaded settings" << std::endl);
+	if (settings.extendedRangeMissing) { // Due to some weird reasons, sometimes settings decide to go missing - this may solve the problem
+		static std::atomic_bool reloadQueued = false;
+		if (!reloadQueued.exchange(true)) {
+			Framework::Registry().EnqueueSettingsUpdate([] {
+				Settings::UpdateSettings();
+				reloadQueued.store(false);
+				LOG_INFO("Reloaded settings" << std::endl);
+			});
+		}
 	}
 
 	if (setAllToNoteGradientTexture) {
@@ -201,7 +519,9 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	Mesh current(Stride, PrimCount, NumVertices);
 	ThiccMesh currentThicc(Stride, PrimCount, NumVertices, StartIndex, StartRegister, PrimType, decl->Type, VectorCount, NumElements);
 
-	// Debugging of DIP.
+	// Debugging of DIP. Compiled out of Release: `debug` is false there anyway, and the mesh
+	// logger is an investigation tool the draw path should not carry.
+	#ifdef _DEBUG
 	if (debug) {
 		if (GetAsyncKeyState(VK_PRIOR) & 1 && currIdx < std::size(allMeshes) - 1)// Page up
 			currIdx++;
@@ -218,12 +538,14 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 
 		if (GetAsyncKeyState(VK_F8) & 1) { // Save logged meshes to file
 			for (const auto& mesh : allMeshes) {
+				(void)mesh;
 				//Log(mesh.ToString().c_str());
 			}
 		}
 
 		if (GetAsyncKeyState(VK_F7) & 1) { // Save only removed 
 			for (const auto& mesh : removedMeshes) {
+				(void)mesh;
 				//Log(mesh.ToString().c_str());
 			}
 		}
@@ -232,7 +554,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 			//Log("{ %d, %d, %d, %d, %d, %d, %d, %d, %d }, ", Stride, PrimCount, NumVertices, StartIndex, StartRegister, PrimType, decl->Type, VectorCount, NumElements);
 
 			if (startLogging) {
-				if (std::find(allMeshes.begin(), allMeshes.end(), currentThicc) == allMeshes.end()) // Make sure we don't log what we'd already logged
+				if (std::ranges::find(allMeshes, currentThicc) == allMeshes.end()) // Make sure we don't log what we'd already logged
 					allMeshes.push_back(currentThicc);
 				if (NOTE_STEMS) // Criteria for search
 					LOG_INFO("{ " << Stride << ", "
@@ -267,11 +589,11 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 		if (IsExtraRemoved(removedMeshes, currentThicc))
 			return REMOVE_TEXTURE;
 	}
+	#endif
 
 	// Mods
 
-    bool RemoveFingerprints = Settings::ReturnSettingValue("RemoveFingerprints") == (std::string)"on";
-	if (RemoveFingerprints && IsExtraRemoved(fingerprintMeshes, currentThicc)) {
+	if (settings.removeFingerprints && IsExtraRemoved(fingerprintMeshes, currentThicc)) {
 		for (DWORD stage = 0; stage < 2; stage++) {
 			LPDIRECT3DBASETEXTURE9 pTuningTexBase = nullptr;
 			pDevice->GetTexture(stage, &pTuningTexBase);
@@ -286,7 +608,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	}
 
 	// Change Noteway Color | This NEEDS to be above Extended Range / Custom Colors or it won't work.
-	if (IsToBeRemoved(noteHighway, current) && Settings::ReturnSettingValue("CustomHighwayColors") == (std::string)"on") {
+	if (IsToBeRemoved(noteHighway, current) && settings.customHighwayColors) {
 		pDevice->GetTexture(1, &pBaseNotewayTexture);
 		pCurrNotewayTexture = (IDirect3DTexture9*)pBaseNotewayTexture;
 
@@ -294,15 +616,15 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 			if (D3D::CRCForTexture(pCurrNotewayTexture, pDevice, crc)) {
 
 				// Noteway Texture
-				if (crc == crcNoteLanes && Settings::ReturnNotewayColor("CustomHighwayNumbered") != (std::string)"" && Settings::ReturnNotewayColor("CustomHighwayUnNumbered") != (std::string)"")
+				if (crc == crcNoteLanes && settings.customHighwayLanes)
 					pDevice->SetTexture(1, notewayTexture);
 
 				// Fret Number texture
-				else if (crc == crcNotewayFretNumbers && Settings::ReturnNotewayColor("CustomFretNubmers") != (std::string)"")
+				else if (crc == crcNotewayFretNumbers && settings.customFretNumbers)
 					pDevice->SetTexture(1, fretNumTexture);
 
 				// Gutter texture
-				else if (crc == crcNotewayGutters && Settings::ReturnNotewayColor("CustomHighwayGutter") != (std::string)"")
+				else if (crc == crcNotewayGutters && settings.customHighwayGutter)
 					pDevice->SetTexture(1, gutterTexture);
 			}
 		}
@@ -402,11 +724,11 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	//if (Settings::ReturnSettingValue("DiscoModeEnabled") == "on") {
 	//	 //Need Lovro's Help With This :(
 	//	if (DiscoModeInitialSetting.find(pDevice) == DiscoModeInitialSetting.end()) { // We haven't saved this pDevice's initial values yet
-	//		DWORD initialAlphaValue = (DWORD)pDevice, initialSeperateValue = (DWORD)pDevice;
+	//		DWORD initialAlphaValue = (DWORD)pDevice, initialSeparateValue = (DWORD)pDevice;
 	//		pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, (DWORD*)initialAlphaValue);
-	//		pDevice->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, (DWORD*)initialSeperateValue);
+	//		pDevice->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, (DWORD*)initialSeparateValue);
 	//		
-	//		DiscoModeInitialSetting.insert({ pDevice, std::make_pair(initialAlphaValue, initialSeperateValue) });
+	//		DiscoModeInitialSetting.insert({ pDevice, std::make_pair(initialAlphaValue, initialSeparateValue) });
 	//	}
 	//	else { // We've seen this pDevice value before.
 	//		if (DiscoModeEnabled) { // Key was pressed to have Disco Mode on
@@ -446,18 +768,26 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 
 		// Settings::GetModSetting("SeparateNoteColors") == 1 -> Default Colors, so don't do anything.
 
-		// Use same color scheme on notes as we do on strings (0) || Use Custom Note Color Scheme (2)
-		if (Settings::GetModSetting("SeparateNoteColorsMode") == 0 || (Settings::ReturnSettingValue("SeparateNoteColors") == "on" && Settings::GetModSetting("SeparateNoteColorsMode") == 2)) { 
+		// Color notes like strings (SameAsStrings) || Use Custom Note Color Scheme (Custom)
+		if (settings.noteColorMode == NoteColorMode::SameAsStrings || (settings.separateNoteColors && settings.noteColorMode == NoteColorMode::Custom)) {
+			const bool isNoteHead = IsToBeRemoved(sevenstring, current) || IsExtraRemoved(noteModifiers, currentThicc);
+
+			// Use Exact Colors: the game's note color ramp is still bound here, so read it once and rebuild our textures from it.
+			// Done before picking the texture below, since rebuilding replaces it.
+			if (isNoteHead && settings.useExactColors && D3D::CaptureNoteColorRamp(pDevice)) {
+				D3D::GenerateTextures(pDevice, D3D::Strings);
+				D3D::GenerateTextures(pDevice, D3D::Notes);
+			}
 
 			// Color notes like string colors
-			LPDIRECT3DTEXTURE9 textureToUseOnNotes = customStringColorTexture; 
+			LPDIRECT3DTEXTURE9 textureToUseOnNotes = customStringColorTexture;
 
 			// Custom colored notes
-			if (Settings::GetModSetting("SeparateNoteColorsMode") == 2)
-				textureToUseOnNotes = customNoteColorTexture; 
+			if (settings.noteColorMode == NoteColorMode::Custom)
+				textureToUseOnNotes = customNoteColorTexture;
 
 			// Change all pieces of note head's textures
-			if (IsToBeRemoved(sevenstring, current) || IsExtraRemoved(noteModifiers, currentThicc))  
+			if (isNoteHead)
 				pDevice->SetTexture(1, textureToUseOnNotes);
 
 			// Colors for note stems (part below the note), bends, slides, and accents
@@ -481,7 +811,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	}
 
 	// Twitch wants notes to be removed.
-	if (Settings::IsTwitchSettingEnabled("RemoveNotes"))
+	if (settings.twitchRemoveNotes)
 		// Note textures, outside of note stems and open note accents.
 		if (IsToBeRemoved(sevenstring, current) || IsExtraRemoved(noteModifiers, currentThicc))
 			return REMOVE_TEXTURE;
@@ -505,7 +835,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 		}
 
 	// Twitch wants transparent notes.
-	if (Settings::IsTwitchSettingEnabled("TransparentNotes"))
+	if (settings.twitchTransparentNotes)
 		// Note textures, outside of note stems and open note accents.
 		if (IsToBeRemoved(sevenstring, current) || IsExtraRemoved(noteModifiers, currentThicc) || NOTE_STEMS || OPEN_NOTE_ACCENTS)
 			pDevice->SetTexture(1, nonexistentTexture);
@@ -529,12 +859,12 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 		}
 
 	// Twitch wants solid note colors
-	if (Settings::IsTwitchSettingEnabled("SolidNotes")) {
+	if (settings.twitchSolidNotes) {
 		// Note textures, outside of note stems and open note accents.
 		if (IsToBeRemoved(sevenstring, current) || IsExtraRemoved(noteModifiers, currentThicc)) {
 
 			// Random Colors
-			if (Settings::ReturnSettingValue("SolidNoteColor") == "random") 
+			if (settings.solidNoteColorRandom)
 				pDevice->SetTexture(1, randomTextures[currentRandomTexture]);
 			// They set the color they want in the GUI | TODO: Colors are changed on chord boxes
 			else 
@@ -555,7 +885,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 				if (crc == crcStemsAccents || crc == crcBendSlideIndicators) {  
 
 					// Random Colors
-					if (Settings::ReturnSettingValue("SolidNoteColor") == "random") 
+					if (settings.solidNoteColorRandom)
 						pDevice->SetTexture(1, randomTextures[currentRandomTexture]);
 					else
 						pDevice->SetTexture(1, twitchUserDefinedTexture);
@@ -567,7 +897,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	}
 
 	// Twitch wants us to reset your note streak.
-	if (Settings::IsTwitchSettingEnabled("FYourFC")) {
+	if (settings.twitchFYourFC) {
 		uintptr_t currentNoteStreak = 0;
 
 		if (GameState::Menus::IsInLearnASongModes())
@@ -580,29 +910,31 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	}
 
 	// Twitch wants to see the user play in Drunk Mode.
-	if (Settings::IsTwitchSettingEnabled("DrunkMode")) {
+	if (settings.twitchDrunkMode) {
 		std::uniform_real_distribution<> keepValueWithin(-1.5, 1.5);
 		MemUtil::SetStaticValue(Offsets::ptr_drunkShit.Get(), (float)keepValueWithin(rng), sizeof(float));
 	}
 
 	// Greenscreen Wall
-	if ((Settings::ReturnSettingValue("GreenScreenWallEnabled") == "on" || GreenScreenWall) && IsExtraRemoved(greenScreenWallMesh, currentThicc))
+	if ((settings.greenScreenWall || GreenScreenWall) && IsExtraRemoved(greenScreenWallMesh, currentThicc))
 		return REMOVE_TEXTURE;
 
 	// Thicc Mesh Mods that are as simple as doing a simple check against the params of this function.
-	if (GameState::IsInSong()) {
-		if (Settings::ReturnSettingValue("FretlessModeEnabled") == "on" && IsExtraRemoved(fretless, currentThicc))
+	// cachedIsInSong is refreshed once per frame in Hook_EndScene: IsInSong walks a pointer
+	// chain and builds a string, too much to pay on every draw.
+	if (cachedIsInSong.load(std::memory_order_relaxed)) {
+		if (settings.fretless && IsExtraRemoved(fretless, currentThicc))
 			return REMOVE_TEXTURE;
-		if (Settings::ReturnSettingValue("RemoveInlaysEnabled") == "on" && IsExtraRemoved(inlays, currentThicc))
+		if (settings.removeInlays && IsExtraRemoved(inlays, currentThicc))
 			return REMOVE_TEXTURE;
-		if (Settings::ReturnSettingValue("RemoveLaneMarkersEnabled") == "on" && IsExtraRemoved(laneMarkers, currentThicc))
+		if (settings.removeLaneMarkers && IsExtraRemoved(laneMarkers, currentThicc))
 			return REMOVE_TEXTURE;
-		if (RemoveLyrics && Settings::ReturnSettingValue("RemoveLyrics") == "on" && IsExtraRemoved(lyrics, currentThicc))
+		if (RemoveLyrics && settings.removeLyrics && IsExtraRemoved(lyrics, currentThicc))
 			return REMOVE_TEXTURE;
 	}
 
 	// Remove Headstock Artifacts
-	else if (GameState::Menus::IsInTuningMenus() && Settings::ReturnSettingValue("RemoveHeadstockEnabled") == "on" && RemoveHeadstockInThisMenu)
+	else if (GameState::Menus::IsInTuningMenus() && settings.removeHeadstock && RemoveHeadstockInThisMenu)
 	{
 		// This is called to remove those pesky tuning letters that share the same texture values as fret numbers and chord fingerings
 		if (IsExtraRemoved(tuningLetters, currentThicc)) 
@@ -658,7 +990,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	}
 
 	// Headstock Removal
-	else if (Settings::ReturnSettingValue("RemoveHeadstockEnabled") == "on") {
+	else if (settings.removeHeadstock) {
 		if (POSSIBLE_HEADSTOCKS) { // If we call GetTexture without any filtering, it causes a lockup when ALT-TAB-ing/changing fullscreen to windowed and vice versa
 			if (!RemoveHeadstockInThisMenu) // This user has RemoveHeadstock only on during the song. So if we aren't in the song, we need to draw the headstock texture.
 				return SHOW_TEXTURE;
@@ -677,7 +1009,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 						AddToTextureList(headstockTexturePointers, pCurrTextures[1]);
 				}
 
-				int headstockCRCLimit = 3;
+				size_t headstockCRCLimit = 3;
 
 				// If the user is in multiplayer, we have to make sure our CRC limit is double or some bugs appear.
 				if (GameState::Menus::IsInMultiplayerTunerMenus())
@@ -694,7 +1026,7 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 
 			// We've already cached the headstocks we're using, so find the one we are working with and remove it.
 			if (calculatedHeadstocks)
-				if (std::find(std::begin(headstockTexturePointers), std::end(headstockTexturePointers), pCurrTextures[1]) != std::end(headstockTexturePointers))
+				if (std::ranges::find(headstockTexturePointers, pCurrTextures[1]) != headstockTexturePointers.end())
 					return REMOVE_TEXTURE;
 		}
 	}
@@ -713,31 +1045,40 @@ HRESULT APIENTRY D3DHooks::Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE 
 	return SHOW_TEXTURE; // KEEP THIS LINE. This translates to "Display Graphics".
 }
 
-std::string D3DHooks::ConvertFloatTimeToStringTime(float timeInSeconds) 
+// Resets the headstock texture cache when appropriate, so we aren't re-running the same textures over and over again.
+void D3DHooks::UpdateHeadstockCacheForMenu() {
+	if (Settings::IsOn(Setting::RemoveHeadstockEnabled) && !GameState::Menus::IsInTuningMenus() ||
+		GameState::currentMenu == "MissionMenu") {
+		resetHeadstockCache = true;
+	}
+
+	// If the current menu is not the same as the previous menu and if it's one of menus where you tune your guitar (i.e. headstock is shown), reset the cache because user may want to change the headstock style
+	if (GameState::previousMenu != GameState::currentMenu && GameState::Menus::IsInTuningMenus()) {
+		resetHeadstockCache = true;
+		headstockTexturePointers.clear();
+	}
+}
+
+std::string D3DHooks::ConvertFloatTimeToStringTime(float timeInSeconds)
 {
-	int seconds = 0, minutes = 0, hours = 0;
+	using namespace std::chrono;
 
-	seconds = (int)timeInSeconds % 60;
-	minutes = (int)(timeInSeconds / 60) % 60;
-	hours = timeInSeconds / 3600;
+	const auto dur = duration_cast<seconds>(duration<float>(timeInSeconds));
+	const auto h = duration_cast<hours>(dur);
+	const auto m = duration_cast<minutes>(dur % hours(1));
+	const auto s = duration_cast<seconds>(dur % minutes(1));
 
-	char buffer[64];
-
-	if (hours > 0)
+	if (h.count() > 0)
 	{
-		sprintf_s(buffer, "%02dh:%02dm:%02ds", hours, minutes, seconds);
-	}
-	else
-	{
-		sprintf_s(buffer, "%02dm:%02ds", minutes, seconds);
+		return std::format("{:02}h:{:02}m:{:02}s", h.count(), m.count(), s.count());
 	}
 
-	return std::string(buffer);
+	return std::format("{:02}m:{:02}s", m.count(), s.count());
 }
 
 void D3DHooks::RegenerateTwitchNoteColors(IDirect3DDevice9* pDevice) {
-	if (regenerateUserDefinedTexture) {
-		RSColor userDefColor = Settings::ConvertHexToColor(Settings::ReturnSettingValue("SolidNoteColor"));
+	if (regenerateUserDefinedTexture.exchange(false)) {
+		RSColor userDefColor = Settings::ConvertHexToColor(Settings::ReturnSettingValue(Setting::SolidNoteColor));
 
 		ColorList customColorList(16, userDefColor);
 		D3D::GenerateTexture(pDevice, &twitchUserDefinedTexture, customColorList);
@@ -746,6 +1087,5 @@ void D3DHooks::RegenerateTwitchNoteColors(IDirect3DDevice9* pDevice) {
 		for (int str = 0; str < 6;str++)
 			ERMode::customSolidColor.push_back(userDefColor);
 
-		regenerateUserDefinedTexture = false;
 	}
 }

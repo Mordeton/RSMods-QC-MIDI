@@ -1,5 +1,14 @@
 #include "stdafx.h"
-#include "Main.hpp"
+#include "Proxy.hpp"
+#include "ModManager.hpp"
+#include "Framework/Framework.hpp"
+#include "Mods/Midi.hpp"
+#include "D3DOverlay.hpp"
+#include "Version.h"
+#include "GitVersion.h"
+#include "FrameProfiler.hpp"
+
+namespace Setting = Settings::Setting;
 
 #if defined(_DEBUG) || defined(_WWISE_LOGS)
 bool debug = true;
@@ -14,37 +23,8 @@ bool wwiseLogging = false;
 #endif
 
 #ifndef _RSMODS_VERSION
-#define _RSMODS_VERSION "RSMODS Version: 1.2.8.2 SRC. DEBUG: " << std::boolalpha << debug << ". Wwise Logs: " << std::boolalpha << wwiseLogging << "."
+#define _RSMODS_VERSION "RSMODS Version: " RSMODS_BUILD_VERSION_STRING ". DEBUG: " << std::boolalpha << debug << ". Wwise Logs: " << std::boolalpha << wwiseLogging << "."
 #endif
-
-/// <summary>
-/// Handle Force Enumeration
-/// </summary>
-/// <returns>NULL. Loops while game is open.</returns>
-unsigned WINAPI EnumerationThread() {
-	while (!GameState::GameLoaded)
-		Sleep(5000);
-
-	Settings::ReadKeyBinds();
-	Settings::ReadModSettings();
-
-	int oldDLCCount = Enumeration::GetCurrentDLCCount();
-	int newDLCCount = oldDLCCount;
-
-	while (!GameState::GameClosing) {
-		if (Settings::ReturnSettingValue("ForceReEnumerationEnabled") == "automatic") {
-			oldDLCCount = newDLCCount;
-			newDLCCount = Enumeration::GetCurrentDLCCount();
-
-			if (oldDLCCount != newDLCCount)
-				Enumeration::ForceEnumeration();
-		}
-
-		Sleep(Settings::GetModSetting("CheckForNewSongsInterval"));
-	}
-
-	return 0;
-}
 
 /// <summary>
 /// Send Midi Data Async. Only really used in debug builds to test MIDI commands.
@@ -65,10 +45,10 @@ unsigned WINAPI MidiThread() {
 
 		// If we have sent a Midi PC/CC value to this thread, send the Midi value.
 		if (Midi::sendPC)
-			Midi::SendProgramChange(Midi::dataToSendPC);
+			Midi::SendProgramChange(Midi::AsMidiByte(Midi::dataToSendPC));
 
 		if (Midi::sendCC)
-			Midi::SendControlChange(Midi::dataToSendCC);
+			Midi::SendControlChange(Midi::AsMidiByte(Midi::dataToSendCC));
 
 		Sleep(Midi::sleepFor);
 		currentCount++;
@@ -115,7 +95,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM keyPressed, LPARAM lParam) {
 	if (Menu::menuEnabled && ImGui_ImplWin32_WndProcHandler(hWnd, msg, keyPressed, lParam))
 		return true;
 
-	if (Settings::ReturnSettingValue("PreventMidSongPause") == "on" && D3DHooks::cachedIsInSong) {
+	if (Settings::IsOn(Setting::PreventMidSongPause) && D3DHooks::cachedIsInSong) {
 		switch (msg) {
 			case WM_NCACTIVATE:
 			case WM_ACTIVATEAPP:
@@ -142,13 +122,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM keyPressed, LPARAM lParam) {
 
 			break;
 		case WM_KEYUP:
-			Keybindings::HandleKeyUp(keyPressed);
+			Keybindings::HandleKeyUp(keyPressed, lParam);
 			break;
 		case WM_KEYDOWN:
-			Keybindings::HandleKeyDown(keyPressed);
+			Keybindings::HandleKeyDown(keyPressed, lParam);
 			break;
 		case WM_CLOSE:
 			GameState::GameClosing = true;
+			Framework::Inbox().Wake();
 			break;
 		case WM_COPYDATA:
 			Keybindings::UpdateSettingsOnGUIChange(lParam);
@@ -158,8 +139,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM keyPressed, LPARAM lParam) {
 			POINT mPos;
 			GetCursorPos(&mPos);
 			ScreenToClient(hWnd, &mPos);
-			ImGui::GetIO().MousePos.x = mPos.x;
-			ImGui::GetIO().MousePos.y = mPos.y;
+			ImGui::GetIO().MousePos.x = static_cast<float>(mPos.x);
+			ImGui::GetIO().MousePos.y = static_cast<float>(mPos.y);
 			break;
 	}
 
@@ -167,9 +148,11 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM keyPressed, LPARAM lParam) {
 }
 
 void UpdateGameWindowStacking() {
-	if (Settings::ReturnSettingValue("PreventMidSongPause") == "on") {
-		bool actuallyInSong = GameState::IsInSong();
+	// Published every frame, not only for PreventMidSongPause: Hook_DIP reads it per draw.
+	const bool actuallyInSong = GameState::IsInSong();
+	D3DHooks::cachedIsInSong.store(actuallyInSong, std::memory_order_relaxed);
 
+	if (Settings::IsOn(Setting::PreventMidSongPause)) {
 		if (ensureForcedTopMode) {
 			static bool lastState = false;
 			if (actuallyInSong != lastState) {
@@ -180,8 +163,6 @@ void UpdateGameWindowStacking() {
 				lastState = actuallyInSong;
 			}
 		}
-	
-		D3DHooks::cachedIsInSong = actuallyInSong;
 	}
 }
 
@@ -196,13 +177,26 @@ HRESULT APIENTRY D3DHooks::Hook_EndScene(IDirect3DDevice9* pDevice) {
 		return originalReturn;
 	}
 
+	FrameProfiler::OnFrame();
+
+	// Don't draw our overlay onto a lost / not-yet-reset device (e.g. mid Alt+Tab out of exclusive fullscreen).
+	if (FAILED(pDevice->TestCooperativeLevel())) {
+		return originalReturn;
+	}
+
 	Menu::Init(pDevice, (LONG_PTR)WndProc);
 	Menu::RenderImGuiMenu();
 	Menu::UpdateStringTextures(pDevice);
 	UpdateGameWindowStacking();
+	QualityOfLife::FixNonExclusiveFullscreen();
+	D3DHooks::UpdateUltrawideState(pDevice);
 	GameOverlay::RenderOverlay(pDevice);
 	D3DHooks::RegenerateTwitchNoteColors(pDevice);
-	
+
+	// Last: ImGui and the overlay font restore the game's state through state blocks, which
+	// the stream-source mirror can't see.
+	D3DHooks::SyncStreamSourceMirror(pDevice);
+
 	return originalReturn;
 }
 
@@ -228,23 +222,43 @@ unsigned WINAPI HandleEffectQueueThread() {
 unsigned WINAPI MainThread() {
 	LOG_NOHEAD(_RSMODS_VERSION << std::endl);
 
-	GameLoopState loopState = {};
-
 	Keybindings::InitializeCommands();
 	ModManager::InitializeConfiguration();
 	ModManager::InitializeMods(debug);
+	Framework::Registry().InstantiatePending();
 	ModManager::ApplyStartupMods();
+	Framework::Registry().DispatchInitialize();
 
+	auto nextModTick = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
 	while (!GameState::GameClosing) {
-		Sleep(250);
+		Framework::Inbox().WaitUntil(nextModTick);
+		if (GameState::GameClosing) break;
+
+		// Commands are drained independently of the maintenance tick. Both paths run on this
+		// thread, so command actions and mod lifecycle/tick callbacks cannot race one another.
+		const Framework::GamePhase commandPhase = !GameState::GameLoaded
+			? Framework::GamePhase::Loading
+			: GameState::IsInSong() ? Framework::GamePhase::Song : Framework::GamePhase::Menu;
+		Framework::Registry().DispatchCommands(commandPhase, GameState::GameLoaded);
+
+		const auto now = std::chrono::steady_clock::now();
+		if (now < nextModTick) continue;
 
 		if (GameState::GameLoaded) {
-			ModManager::HandlePostGameLoadedMods(loopState);
+			ModManager::HandlePostGameLoadedMods();
+			Framework::Registry().Tick(GameState::IsInSong() ? Framework::GamePhase::Song : Framework::GamePhase::Menu);
 		}
 		else {
-			ModManager::UpdateGameLoadingState(loopState);
+			ModManager::UpdateGameLoadingState();
+			Framework::Registry().Tick(Framework::GamePhase::Loading);
 		}
+
+		// Missed maintenance deadlines are not replayed as a burst of catch-up ticks.
+		nextModTick = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
 	}
+
+	CrowdControl::StopServer();
+	Framework::Registry().Shutdown();
 
 	return 0;
 }
@@ -258,36 +272,48 @@ void Initialize() {
 	Wwise::Exports::Initialize();
 
 	std::thread(MainThread).detach(); // Mod Toggle based on menus
-	std::thread(EnumerationThread).detach(); // Force Enumeration
 	std::thread(HandleEffectQueueThread).detach(); // Twitch Effects
 	std::thread(MidiThread).detach(); // MIDI Auto Tuning / True Tuning
 	std::thread(RiffRepeaterThread).detach(); // RR Speed Above 100% Log
 }
 
-void SetupLogging() {
-	bool debugLogPresent = std::ifstream("RSMods_debug.txt").good();
-	auto clearDebugLog = std::ofstream("RSMods_debug.txt");
+/// <summary>
+/// Build an absolute path to a file sitting next to the game executable.
+/// SetupLogging() runs under the loader lock at DLL_PROCESS_ATTACH, where the
+/// process working directory is not yet guaranteed to be the Rocksmith folder,
+/// so a bare relative filename would resolve against the wrong directory.
+/// </summary>
+static std::string PathNextToExecutable(const std::string& fileName) {
+	char executable[MAX_PATH]{};
+	GetModuleFileNameA(NULL, executable, MAX_PATH);
 
-	FILE* streamRead;
-	FILE* streamConsole;
+	std::string path(executable);
+	const size_t slash = path.find_last_of("\\/");
+	if (slash != std::string::npos)
+		path.resize(slash + 1);
+	else
+		path.clear();
+
+	return path + fileName;
+}
+
+void SetupLogging() {
+	// Opt-in: only log to file if RSMods_debug.txt already exists (same as before).
+	const std::string debugLogPath = PathNextToExecutable("RSMods_debug.txt");
+	const bool debugLogPresent = std::ifstream(debugLogPath).good();
 
 	if (debug) {
 		AllocConsole();
 
 		// Connect stdin, stdout to the debug console.
+		FILE* streamRead = nullptr;
+		FILE* streamConsole = nullptr;
 		freopen_s(&streamRead, "CONIN$", "r", stdin);
 		freopen_s(&streamConsole, "CONOUT$", "w", stdout);
 	}
 
-	// Create log file to both help with debugging release builds,
-	// and allow the user to examine their debug logs after a crash.
 	if (debugLogPresent) {
-		// Clear log so it isn't full of junk from the last launch
-		clearDebugLog.open("RSMods_debug.txt", std::ofstream::out | std::ofstream::trunc);
-		clearDebugLog.close();
-
-		FILE* debugLog;
-		freopen_s(&debugLog, "RSMods_debug.txt", "w", stderr);
+		Logger::GetInstance().InitFile(debugLogPath);
 	}
 }
 
@@ -298,11 +324,19 @@ void SetupLogging() {
 /// <param name="dwReason"></param>
 /// <param name="lpReserved"></param>
 /// <returns>Always returns TRUE</returns>
-BOOL APIENTRY DllMain(HMODULE hModule, uint32_t dwReason, LPVOID lpReserved) {
+BOOL APIENTRY DllMain(HMODULE hModule, uint32_t dwReason, LPVOID) {
 	switch (dwReason) {
 		case DLL_PROCESS_ATTACH:
 			SetupLogging();
 			DisableThreadLibraryCalls(hModule); // Disables the DLL_THREAD_ATTACH and DLL_THREAD_DETACH notifications. | https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-disablethreadlibrarycalls
+
+			// The game FreeLibrary's xinput1_3 while shutting down its input service, but our hooks and threads stay live until it exits.
+			// Unloading then would jump into freed code, and our std::jthread globals would join under the loader lock (hangs on close).
+			// Pinning keeps us loaded until process exit, when the other threads are already gone.
+			{
+				HMODULE self = nullptr;
+				GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<LPCWSTR>(&DllMain), &self);
+			}
 			Proxy::Init(); // Proxy all real XInput commands to the actual xinput1_3.dll.
 			Initialize(); // Inject our mod code.
 			return TRUE;

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using RSMods.Util;
 
 #pragma warning disable IDE0052
@@ -26,7 +26,7 @@ namespace RSMods
 
                              // Mod On / Off
                              ToggleLoftEnabled, VolumeControlEnabled, ShowSongTimerEnabled, ForceReEnumerationEnabled, RainbowStringsEnabled, RainbowNotesEnabled,
-                             ExtendedRangeEnabled, ExtendedRangeDropTuning, ExtendedRangeFixBassTuning, CustomStringColorsNumber, SeparateNoteColors,
+                             ExtendedRangeEnabled, ExtendedRangeDropTuning, ExtendedRangeFixBassTuning, CustomStringColorsNumber, SeparateNoteColors, UseExactColors,
                              DiscoModeEnabled, RemoveHeadstockEnabled, RemoveSkylineEnabled, GreenscreenWallEnabled, ForceProfileEnabled, FretlessEnabled, RemoveInlaysEnabled, ToggleLoftWhen,
                              ToggleSkylineWhen, RemoveLaneMarkersEnabled, RemoveLyricsEnabled, RemoveLyricsWhen, GuitarSpeakEnabled, RemoveHeadstockWhen, ScreenShotScores,
                              MidiAutoTuning, MidiAutoTuningDevice, MidiInDevice, MidiAutoTuningWhen, QCAutomationEnabled, QCAutomationTestOnSongStart, QCAutomationDevice, QCAutomationSectionEnabled,
@@ -36,7 +36,7 @@ namespace RSMods
                              QCAutomationSectionModKeywords, QCAutomationSectionSoloPriority, QCAutomationSectionDistPriority, QCAutomationSectionODPriority, QCAutomationSectionCleanPriority, QCAutomationSectionModPriority,
                              MidiSoftwareSemitoneTriggers, MidiSoftwareSemitoneSettings, MidiSoftwareTrueTuningTriggers, MidiSoftwareTrueTuningSettings, ChordsMode,
                              RiffRepeaterAboveHundred, ShowCurrentNoteOnScreen, OnScreenFont, OnScreenFontSize, ProfileToLoad, ShowSongTimerWhen, ShowSelectedVolumeWhen, SecondaryMonitor, RemoveSongPreviews, OverrideInputVolumeEnabled, OverrideInputVolumeDevice,
-                             AllowAudioInBackground, BypassTwoRTCMessageBox, LinearRiffRepeater, UseAlternativeOutputSampleRate, AllowLooping, AllowRewind, FixOculusCrash, FixBrokenTones, UseCustomNSPTimer, DisplayCurrentAccuracy, PreventMidSongPause, RemoveFingerprints,
+                             AllowAudioInBackground, BypassTwoRTCMessageBox, LinearRiffRepeater, UseAlternativeOutputSampleRate, AllowLooping, AllowRewind, FixOculusCrash, FixBrokenTones, UseCustomNSPTimer, DisplayCurrentAccuracy, PreventMidSongPause, RemoveFingerprints, Ultrawide, FastProfileLoadAndSave,
 
 
                              // String Colors
@@ -125,6 +125,7 @@ namespace RSMods
             ExtendedRangeFixBassTuningIdentifier        = "ExtendedRangeFixBassTuning = ",
             CustomStringColorNumberIndetifier           = "CustomStringColors = ",
             SeparateNoteColorsIdentifier                = "SeparateNoteColors = ",
+            UseExactColorsIdentifier                    = "UseExactColors = ",
             DiscoModeIdentifier                         = "DiscoMode = ",
             RemoveHeadstockIdentifier                   = "Headstock = ",
             RemoveSkylineIdentifier                     = "Skyline = ",
@@ -185,7 +186,6 @@ namespace RSMods
             OnScreenFontSizeIdentifier                  = "OnScreenFontSize = ",
             ProfileToLoadIdentifier                     = "ProfileToLoad = ",
             ShowSongTimerWhenIdentifier                 = "ShowSongTimerWhen = ",
-            ShowSelectedVolumeWhenIdentifier            = "ShowSelectedVolumeWhen = ",
             SecondaryMonitorIdentifier                  = "SecondaryMonitor = ",
             RemoveSongPreviewsIdentifier                = "SongPreviews = ",
             OverrideInputVolumeEnabledIdentifier        = "OverrideInputVolumeEnabled = ",
@@ -201,6 +201,8 @@ namespace RSMods
             UseCustomNSPTimerIdentifier                 = "UseCustomNSPTimer = ",
             DisplayCurrentAccuracyIdentifier            = "DisplayCurrentAccuracy = ",
             PreventMidSongPauseIdentifier               = "PreventMidSongPause = ",
+            UltrawideIdentifier                         = "Ultrawide = ",
+            FastProfileLoadAndSaveIdentifier            = "FastProfileLoadAndSave = ",
 
                 // String Colors (Normal {N} & Colorblind {CB})
                 // Normal String Colors
@@ -467,6 +469,8 @@ namespace RSMods
                     return FillSettingVariable(CustomStringColorNumberIndetifier, SettingType.STRING, currentLine, out CustomStringColorsNumber);
                 if (IdentifierIsFound(currentLine, SeparateNoteColorsIdentifier, identifierToGrab))
                     return FillSettingVariable(SeparateNoteColorsIdentifier, SettingType.STRING, currentLine, out SeparateNoteColors);
+                if (IdentifierIsFound(currentLine, UseExactColorsIdentifier, identifierToGrab))
+                    return FillSettingVariable(UseExactColorsIdentifier, SettingType.ON_OFF, currentLine, out UseExactColors);
                 if (IdentifierIsFound(currentLine, DiscoModeIdentifier, identifierToGrab))
                     return FillSettingVariable(DiscoModeIdentifier, SettingType.ON_OFF, currentLine, out DiscoModeEnabled);
                 if (IdentifierIsFound(currentLine, RemoveHeadstockIdentifier, identifierToGrab))
@@ -583,8 +587,6 @@ namespace RSMods
                     return FillSettingVariable(ProfileToLoadIdentifier, SettingType.STRING, currentLine, out ProfileToLoad);
                 if (IdentifierIsFound(currentLine, ShowSongTimerWhenIdentifier, identifierToGrab))
                     return FillSettingVariable(ShowSongTimerWhenIdentifier, SettingType.STRING, currentLine, out ShowSongTimerWhen);
-                if (IdentifierIsFound(currentLine, ShowSelectedVolumeWhenIdentifier, identifierToGrab))
-                    return FillSettingVariable(ShowSelectedVolumeWhenIdentifier, SettingType.STRING, currentLine, out ShowSelectedVolumeWhen);
                 if (IdentifierIsFound(currentLine, SecondaryMonitorIdentifier, identifierToGrab))
                     return FillSettingVariable(SecondaryMonitorIdentifier, SettingType.STRING, currentLine, out SecondaryMonitor);
                 if (IdentifierIsFound(currentLine, RemoveSongPreviewsIdentifier, identifierToGrab))
@@ -615,6 +617,10 @@ namespace RSMods
                     return FillSettingVariable(DisplayCurrentAccuracyIdentifier, SettingType.ON_OFF, currentLine, out DisplayCurrentAccuracy);
                 if (IdentifierIsFound(currentLine, PreventMidSongPauseIdentifier, identifierToGrab))
                     return FillSettingVariable(PreventMidSongPauseIdentifier, SettingType.ON_OFF, currentLine, out PreventMidSongPause);
+                if (IdentifierIsFound(currentLine, UltrawideIdentifier, identifierToGrab))
+                    return FillSettingVariable(UltrawideIdentifier, SettingType.ON_OFF, currentLine, out Ultrawide);
+                if (IdentifierIsFound(currentLine, FastProfileLoadAndSaveIdentifier, identifierToGrab))
+                    return FillSettingVariable(FastProfileLoadAndSaveIdentifier, SettingType.ON_OFF, currentLine, out FastProfileLoadAndSave);
                 if (IdentifierIsFound(currentLine, RemoveFingerprintsIdentifier, identifierToGrab))
                     return FillSettingVariable(RemoveFingerprintsIdentifier, SettingType.ON_OFF, currentLine, out RemoveFingerprints);
 

@@ -4,7 +4,6 @@
 // STL
 #include <chrono>
 #include <cmath>
-#include <codecvt>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -65,7 +64,6 @@
 #include "D3D/D3D.hpp"
 #include "D3D/D3DHooks.hpp"
 #include "Log.hpp"
-#include "MemHelpers.hpp"
 #include "MemUtil.hpp"
 #include "Offsets.hpp"
 #include "Settings.hpp"
@@ -76,11 +74,11 @@
 #include "SongTuning.hpp"
 #include "GameState.hpp"
 #include "SongTimer.hpp"
-#include "D3DOverlay.hpp"
 
 /// <param name="valueToCheckIfInsideArray"> - Input</param>
 /// <param name="vec"> - Is input in list | VECTOR? (NULLABLE)</param>
-template <typename T>
-bool Contains(const T& valueToCheckIfInsideArray, const std::vector<T>& vec);
+template <typename T, std::ranges::input_range R>
+	requires std::convertible_to<T, std::ranges::range_value_t<R>>
+constexpr bool Contains(const T& value, const R& range);
 
 bool Contains(std::string_view text, std::string_view key);

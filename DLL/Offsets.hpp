@@ -2,6 +2,7 @@
 
 #include "VersioningStruct.h"
 #include <vector>
+#include <cstddef>
 
 namespace Offsets {
 	extern uintptr_t baseHandle; // Beginning of Rocksmith
@@ -14,6 +15,10 @@ namespace Offsets {
 
 	// Current Tuning
 	inline VersioningStruct<uintptr_t> ptr_tuning;
+
+	// Ultrawide: Riff Repeater post-effects state substitution (Mods/UltrawideRRDim.cpp).
+	inline VersioningStruct<uintptr_t> hook_loftPostFxSetState;   // CALL rel32 inside the loft manager's "set state"
+	inline VersioningStruct<uintptr_t> func_loftPostFxSetState;   // The loft post-effects manager's "set state", the call's target
 	extern std::vector<unsigned int> ptr_tuningOffsets;
 
 	// True Tuning
@@ -26,11 +31,27 @@ namespace Offsets {
 
 	// Tuning - Textual Form
 	inline VersioningStruct<uintptr_t> ptr_tuningText;
+
+	// Tuner menu: its per-frame tick, hooked to find the open tuner and read the arrangement's tuning from it
+	inline VersioningStruct<uintptr_t> ptr_tunerTickSlot;
+	inline VersioningStruct<uintptr_t> func_tunerTick;
+	inline VersioningStruct<uintptr_t> func_resolveGuitarClass;
 	extern std::vector<unsigned int> ptr_tuningTextOffsets;
 
 	// Current Note (Midi value: https://djip.co/w/wp-content/uploads/drupal/blog/logic-midi-note-numbers.png | 0 - 96 are used in Rocksmith).
 	inline VersioningStruct<uintptr_t> ptr_guitarSpeak;
 	extern std::vector<unsigned int> ptr_guitarSpeakOffets;
+
+	// Note Detection
+	inline VersioningStruct<uintptr_t> ptr_noteDetectionFloor;
+
+	// Fast Load soft lock retry
+	inline VersioningStruct<uintptr_t> ptr_menuLoadUpdate;
+	inline VersioningStruct<uintptr_t> ptr_menuLoadUpdateJmpBck;
+	inline VersioningStruct<uintptr_t> ptr_menuMovieSetup;
+	inline VersioningStruct<uintptr_t> ptr_menuMovieSetupJmpBck;
+	inline VersioningStruct<uintptr_t> func_menuMovieRequest;
+	inline VersioningStruct<uintptr_t> ptr_menuMovieVTable;
 
 	// Removed do to access to Wwise calls.
 	//// Mixer Volumes
@@ -67,15 +88,16 @@ namespace Offsets {
 	extern const char* patch_ListNumbers;
 	extern const char* patch_SprintfArgs;
 
+	// Non-Stop Play: extra song lists (Mods/ExtraSongLists.cpp)
+	inline VersioningStruct<uintptr_t> ptr_songListService;				// Static Memory | Song list service; +0x10 holds the song lists object, whose +0x0C is the array of lists
+	inline VersioningStruct<uintptr_t> ptr_nspSongListIdsLoop, ptr_nspSongListIdsLoopTop, ptr_nspSongListIdsLoopExit;
+	inline VersioningStruct<uintptr_t> ptr_nspSongListLabelsLoop, ptr_nspSongListLabelsLoopTop, ptr_nspSongListLabelsLoopExit;
+	inline VersioningStruct<uintptr_t> ptr_nspPoolSongListSwitch, ptr_nspPoolDispatch, ptr_nspPoolSongList, ptr_nspPoolEmpty;
+
 	// Disable Controllers
 	inline VersioningStruct<uintptr_t> hookAddr_DirectInput8, hookBackAddr_DirectInput8;
 	inline VersioningStruct<uintptr_t> xinputModule;
 	inline VersioningStruct<uintptr_t> xinputEnable;
-
-	//D3D Stuff
-	extern const char* d3dDevice_Pattern;
-	extern uint32_t d3dDevice_SearchLen;
-	extern char* d3dDevice_Mask;
 
 	// Multiplayer
 	inline VersioningStruct<uintptr_t> ptr_multiplayer;
@@ -155,13 +177,20 @@ namespace Offsets {
 	inline VersioningStruct<uintptr_t> ptr_PnpJmp_2;
 	inline VersioningStruct<uintptr_t> ptr_Password_LimitCharacters_Clipboard;
 	inline VersioningStruct<uintptr_t> ptr_Password_LimitCharacters;
+	inline VersioningStruct<uintptr_t> ptr_SaveFilePlatformIdCheck;
 	inline VersioningStruct<uintptr_t> ptr_AdvancedDisplayCrash;
 	inline VersioningStruct<uintptr_t> ptr_AdvancedDisplayCrashJmpBck;
 	inline VersioningStruct<uintptr_t> ptr_PortAudioInCrash; 
 	inline VersioningStruct<uintptr_t> ptr_AdditionalAudioDevicesCrash;
 	inline VersioningStruct<uintptr_t> ptr_ModdedPtrCrashFix;
+	inline VersioningStruct<uintptr_t> ptr_ControllerAxisBounds;
+	inline VersioningStruct<uintptr_t> ptr_ControllerAxisBoundsJmpBck;
+	inline VersioningStruct<uintptr_t> ptr_InvalidInputTreeRootCheck;
+	inline VersioningStruct<uintptr_t> ptr_InvalidInputTreeRootJmpBck;
+	inline VersioningStruct<uintptr_t> ptr_InvalidInputTreeRootEmptyJmpBck;
 
 	// Audio In Background
+	inline VersioningStruct<uintptr_t> func_FocusLostEvent;
 	inline VersioningStruct<uintptr_t> ptr_IsWindowInFocus;
 	inline VersioningStruct<uintptr_t> ptr_WindowNotInFocusValue;
 
@@ -209,6 +238,51 @@ namespace Offsets {
 	inline VersioningStruct<uintptr_t> patch_scrollSpeedLTTarget; // Less than target
 	inline VersioningStruct<uintptr_t> patch_scrollSpeedGTTarget; // Greater than target
 	extern const char* patch_scrollSpeedChange;
+
+	// Calibration meter volume sample count
+	inline VersioningStruct<uintptr_t> ptr_calibrationSampleCountClamp;
+	inline VersioningStruct<uintptr_t> ptr_calibrationSampleCountClampJmpBck;
+
+	// Large profile save / load
+	inline VersioningStruct<uintptr_t> ptr_profileSaveCloneSection;
+	inline VersioningStruct<uintptr_t> ptr_profileSaveCloneSectionJmpBck;
+	inline VersioningStruct<uintptr_t> ptr_profileSavePrintRoot;
+	inline VersioningStruct<uintptr_t> ptr_profileSavePrintRootJmpBck;
+	inline VersioningStruct<uintptr_t> ptr_profileSaveCompressBoundCall;
+	inline VersioningStruct<uintptr_t> ptr_profileSaveCompress2Call;
+	inline VersioningStruct<uintptr_t> func_profileJsonWriter;
+	inline VersioningStruct<uintptr_t> func_zlibDeflateInit;
+	inline VersioningStruct<uintptr_t> func_zlibDeflate;
+	inline VersioningStruct<uintptr_t> func_zlibDeflateEnd;
+	inline VersioningStruct<uintptr_t> ptr_profileLoadClearDocument;
+	inline VersioningStruct<uintptr_t> ptr_profileLoadClearDocumentJmpBck;
+	inline VersioningStruct<uintptr_t> func_engineStringDestroy;
+	inline VersioningStruct<uintptr_t> ptr_profileLoadTick;
+	inline VersioningStruct<uintptr_t> ptr_profileLoadTickJmpBck;
+	inline VersioningStruct<uintptr_t> ptr_profileAdapter;
+	inline VersioningStruct<uintptr_t> ptr_gameServices;
+	inline VersioningStruct<uintptr_t> ptr_profileParseCall;
+	inline VersioningStruct<uintptr_t> ptr_profileSaveCall;
+	inline VersioningStruct<uintptr_t> func_jsonNumberHash;
+	inline VersioningStruct<uintptr_t> func_jsonNumberTableRehash;
+	inline VersioningStruct<uintptr_t> ptr_jsonNumberTable;
+	inline VersioningStruct<uintptr_t> ptr_jsonNumberTableLock;
+	inline VersioningStruct<uintptr_t> func_getAllocatorOwner;
+	inline VersioningStruct<uintptr_t> func_playnextTrim;
+	inline VersioningStruct<uintptr_t> func_profileSongs;
+
+	// Non-Exclusive Fullscreen: the renderer, and its current display flags (0x80 non-exclusive fullscreen, 0x04 exclusive fullscreen)
+	inline VersioningStruct<uintptr_t> ptr_renderer;
+	inline constexpr unsigned int rendererDisplayFlagsOffset = 0x910;
+
+	// MonoToStereoChannel: the audio input's stereo to mono conversions (used when a stereo input device is opened as mono, they keep the left channel),
+	// and the Rocksmith.ini settings as the game loaded them (MonoToStereoChannel at +0x10)
+	inline VersioningStruct<uintptr_t> func_stereoToMono8;
+	inline VersioningStruct<uintptr_t> func_stereoToMono16;
+	inline VersioningStruct<uintptr_t> func_stereoToMono32;
+	inline VersioningStruct<uintptr_t> func_stereoToMonoFloat;
+	inline VersioningStruct<uintptr_t> ptr_iniSettings;
+	inline constexpr unsigned int iniSettingsMonoToStereoChannelOffset = 0x10;
 
 	// Runtime data.
 	inline uintptr_t runtimeVersionStructValue;

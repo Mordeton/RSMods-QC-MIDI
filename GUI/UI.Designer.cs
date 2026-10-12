@@ -1,4 +1,4 @@
-﻿namespace RSMods
+namespace RSMods
 {
     partial class MainForm
     {
@@ -62,7 +62,9 @@
             this.checkBox_FixBadBassTuning = new System.Windows.Forms.CheckBox();
             this.checkBox_ExtendedRangeDrop = new System.Windows.Forms.CheckBox();
             this.groupBox_EnabledMods = new System.Windows.Forms.GroupBox();
+            this.checkBox_RemoveFingerprints = new System.Windows.Forms.CheckBox();
             this.checkBox_PreventMidSongPause = new System.Windows.Forms.CheckBox();
+            this.checkBox_Ultrawide = new System.Windows.Forms.CheckBox();
             this.checkBox_DisplayCurrentAccuracy = new System.Windows.Forms.CheckBox();
             this.checkBox_CustomNSPTimer = new System.Windows.Forms.CheckBox();
             this.checkBox_FixBrokenTones = new System.Windows.Forms.CheckBox();
@@ -117,6 +119,7 @@
             this.textBox_String5Color = new System.Windows.Forms.TextBox();
             this.button_String5ColorButton = new System.Windows.Forms.Button();
             this.groupBox_StringColors = new System.Windows.Forms.GroupBox();
+            this.checkBox_UseExactColors = new System.Windows.Forms.CheckBox();
             this.radio_colorBlindERStringColors = new System.Windows.Forms.RadioButton();
             this.radio_DefaultStringColors = new System.Windows.Forms.RadioButton();
             this.groupBox_SetAndForget = new System.Windows.Forms.GroupBox();
@@ -246,6 +249,7 @@
             this.textBox_Note0Color = new System.Windows.Forms.TextBox();
             this.button_Note0ColorButton = new System.Windows.Forms.Button();
             this.tabPage_ModSettings_DisableUI = new System.Windows.Forms.TabPage();
+            this.groupBox_ToggleFingerprints = new System.Windows.Forms.GroupBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.btnSaveFontSize = new System.Windows.Forms.Button();
             this.lblCurrentFontSize = new System.Windows.Forms.Label();
@@ -320,6 +324,8 @@
             this.groupBox_Backups = new System.Windows.Forms.GroupBox();
             this.checkBox_UnlimitedBackups = new System.Windows.Forms.CheckBox();
             this.nUpDown_NumberOfBackups = new System.Windows.Forms.NumericUpDown();
+            this.groupBox_ProfileLoadSave = new System.Windows.Forms.GroupBox();
+            this.checkBox_FastProfileLoadAndSave = new System.Windows.Forms.CheckBox();
             this.groupBox_RRSpeed = new System.Windows.Forms.GroupBox();
             this.nUpDown_RiffRepeaterSpeed = new System.Windows.Forms.NumericUpDown();
             this.groupBox_ControlVolumeIncrement = new System.Windows.Forms.GroupBox();
@@ -388,6 +394,7 @@
             this.groupBox_Rocksmith_AudioSettings = new System.Windows.Forms.GroupBox();
             this.checkBox_Rocksmith_LowLatencyMode = new System.Windows.Forms.CheckBox();
             this.checkBox_Rocksmith_RTCOnly = new System.Windows.Forms.CheckBox();
+            this.checkBox_Rocksmith_RightInputChannel = new System.Windows.Forms.CheckBox();
             this.checkBox_Rocksmith_DumpAudioLog = new System.Windows.Forms.CheckBox();
             this.checkBox_Rocksmith_ForceDirextXSink = new System.Windows.Forms.CheckBox();
             this.checkBox_Rocksmith_ForceWDM = new System.Windows.Forms.CheckBox();
@@ -550,8 +557,6 @@
             this.label_SettingsSaved = new System.Windows.Forms.Label();
             this.fileSystemWatcher1 = new System.IO.FileSystemWatcher();
             this.button_UpdateRSMods = new System.Windows.Forms.Button();
-            this.groupBox_ToggleFingerprints = new System.Windows.Forms.GroupBox();
-            this.checkBox_RemoveFingerprints = new System.Windows.Forms.CheckBox();
             this.groupBox_HowToEnumerate.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nUpDown_ForceEnumerationXMS)).BeginInit();
             this.groupBox_LoftOffWhen.SuspendLayout();
@@ -614,6 +619,7 @@
             this.groupBox_CustomHighway.SuspendLayout();
             this.groupBox_Backups.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nUpDown_NumberOfBackups)).BeginInit();
+            this.groupBox_ProfileLoadSave.SuspendLayout();
             this.groupBox_RRSpeed.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nUpDown_RiffRepeaterSpeed)).BeginInit();
             this.groupBox_ControlVolumeIncrement.SuspendLayout();
@@ -1082,6 +1088,7 @@
             // 
             this.groupBox_EnabledMods.Controls.Add(this.checkBox_RemoveFingerprints);
             this.groupBox_EnabledMods.Controls.Add(this.checkBox_PreventMidSongPause);
+            this.groupBox_EnabledMods.Controls.Add(this.checkBox_Ultrawide);
             this.groupBox_EnabledMods.Controls.Add(this.checkBox_DisplayCurrentAccuracy);
             this.groupBox_EnabledMods.Controls.Add(this.checkBox_CustomNSPTimer);
             this.groupBox_EnabledMods.Controls.Add(this.checkBox_FixBrokenTones);
@@ -1122,10 +1129,21 @@
             this.groupBox_EnabledMods.Controls.Add(this.checkBox_RemoveHeadstock);
             this.groupBox_EnabledMods.Location = new System.Drawing.Point(18, 23);
             this.groupBox_EnabledMods.Name = "groupBox_EnabledMods";
-            this.groupBox_EnabledMods.Size = new System.Drawing.Size(319, 469);
+            this.groupBox_EnabledMods.Size = new System.Drawing.Size(319, 490);
             this.groupBox_EnabledMods.TabIndex = 50;
             this.groupBox_EnabledMods.TabStop = false;
             this.groupBox_EnabledMods.Text = "Enabled Mods";
+            // 
+            // checkBox_RemoveFingerprints
+            // 
+            this.checkBox_RemoveFingerprints.AutoSize = true;
+            this.checkBox_RemoveFingerprints.Location = new System.Drawing.Point(11, 446);
+            this.checkBox_RemoveFingerprints.Name = "checkBox_RemoveFingerprints";
+            this.checkBox_RemoveFingerprints.Size = new System.Drawing.Size(123, 17);
+            this.checkBox_RemoveFingerprints.TabIndex = 0;
+            this.checkBox_RemoveFingerprints.Text = "Remove Fingerprints";
+            this.checkBox_RemoveFingerprints.UseVisualStyleBackColor = true;
+            this.checkBox_RemoveFingerprints.CheckedChanged += new System.EventHandler(this.Save_RemoveFingerprints);
             // 
             // checkBox_PreventMidSongPause
             // 
@@ -1137,6 +1155,17 @@
             this.checkBox_PreventMidSongPause.Text = "Prevent Pause Mid Song";
             this.checkBox_PreventMidSongPause.UseVisualStyleBackColor = true;
             this.checkBox_PreventMidSongPause.CheckedChanged += new System.EventHandler(this.Save_PreventMidSongPause);
+            // 
+            // checkBox_Ultrawide
+            // 
+            this.checkBox_Ultrawide.AutoSize = true;
+            this.checkBox_Ultrawide.Location = new System.Drawing.Point(11, 468);
+            this.checkBox_Ultrawide.Name = "checkBox_Ultrawide";
+            this.checkBox_Ultrawide.Size = new System.Drawing.Size(132, 17);
+            this.checkBox_Ultrawide.TabIndex = 82;
+            this.checkBox_Ultrawide.Text = "Ultrawide (21:9 / 32:9)";
+            this.checkBox_Ultrawide.UseVisualStyleBackColor = true;
+            this.checkBox_Ultrawide.CheckedChanged += new System.EventHandler(this.Save_Ultrawide);
             // 
             // checkBox_DisplayCurrentAccuracy
             // 
@@ -1742,6 +1771,7 @@
             // 
             // groupBox_StringColors
             // 
+            this.groupBox_StringColors.Controls.Add(this.checkBox_UseExactColors);
             this.groupBox_StringColors.Controls.Add(this.radio_colorBlindERStringColors);
             this.groupBox_StringColors.Controls.Add(this.radio_DefaultStringColors);
             this.groupBox_StringColors.Controls.Add(this.textBox_String5Color);
@@ -1763,6 +1793,19 @@
             this.groupBox_StringColors.TabStop = false;
             this.groupBox_StringColors.Text = "Change String Colors";
             this.groupBox_StringColors.Visible = false;
+            // 
+            // checkBox_UseExactColors
+            // 
+            this.checkBox_UseExactColors.AutoSize = true;
+            this.checkBox_UseExactColors.Location = new System.Drawing.Point(76, 245);
+            this.checkBox_UseExactColors.Name = "checkBox_UseExactColors";
+            this.checkBox_UseExactColors.Size = new System.Drawing.Size(107, 17);
+            this.checkBox_UseExactColors.TabIndex = 67;
+            this.checkBox_UseExactColors.Text = "Use Exact Colors";
+            this.checkBox_UseExactColors.UseVisualStyleBackColor = true;
+            this.checkBox_UseExactColors.CheckedChanged += new System.EventHandler(this.Save_UseExactColors);
+            this.checkBox_UseExactColors.MouseLeave += new System.EventHandler(this.ToolTips_Hide);
+            this.checkBox_UseExactColors.MouseHover += new System.EventHandler(this.ToolTips_Show);
             // 
             // radio_colorBlindERStringColors
             // 
@@ -2396,7 +2439,7 @@
             this.button_AssignNewGuitarArcadeTone.Name = "button_AssignNewGuitarArcadeTone";
             this.button_AssignNewGuitarArcadeTone.Size = new System.Drawing.Size(224, 35);
             this.button_AssignNewGuitarArcadeTone.TabIndex = 114;
-            this.button_AssignNewGuitarArcadeTone.Text = "Assign Tone As New GuitarArcade Default";
+            this.button_AssignNewGuitarArcadeTone.Text = "Assign Tone As New Guitarcade Default";
             this.button_AssignNewGuitarArcadeTone.UseVisualStyleBackColor = true;
             this.button_AssignNewGuitarArcadeTone.Click += new System.EventHandler(this.SetForget_AssignNewGuitarArcadeTone);
             // 
@@ -3343,6 +3386,16 @@
             this.tabPage_ModSettings_DisableUI.TabIndex = 3;
             this.tabPage_ModSettings_DisableUI.Text = "Disable UI Elements";
             // 
+            // groupBox_ToggleFingerprints
+            // 
+            this.groupBox_ToggleFingerprints.Location = new System.Drawing.Point(6, 164);
+            this.groupBox_ToggleFingerprints.Name = "groupBox_ToggleFingerprints";
+            this.groupBox_ToggleFingerprints.Size = new System.Drawing.Size(168, 51);
+            this.groupBox_ToggleFingerprints.TabIndex = 71;
+            this.groupBox_ToggleFingerprints.TabStop = false;
+            this.groupBox_ToggleFingerprints.Text = "Toggle Fingerprints";
+            this.groupBox_ToggleFingerprints.Visible = false;
+            // 
             // groupBox1
             // 
             this.groupBox1.Controls.Add(this.btnSaveFontSize);
@@ -3884,6 +3937,7 @@
             this.tabPage_ModSettings_Misc.Controls.Add(this.button_ResetModsToDefault);
             this.tabPage_ModSettings_Misc.Controls.Add(this.groupBox_CustomHighway);
             this.tabPage_ModSettings_Misc.Controls.Add(this.groupBox_Backups);
+            this.tabPage_ModSettings_Misc.Controls.Add(this.groupBox_ProfileLoadSave);
             this.tabPage_ModSettings_Misc.Controls.Add(this.groupBox_RRSpeed);
             this.tabPage_ModSettings_Misc.Controls.Add(this.groupBox_ControlVolumeIncrement);
             this.tabPage_ModSettings_Misc.Location = new System.Drawing.Point(4, 22);
@@ -4255,6 +4309,29 @@
             0});
             this.nUpDown_NumberOfBackups.ValueChanged += new System.EventHandler(this.Save_NumberOfBackups);
             // 
+            // groupBox_ProfileLoadSave
+            // 
+            this.groupBox_ProfileLoadSave.Controls.Add(this.checkBox_FastProfileLoadAndSave);
+            this.groupBox_ProfileLoadSave.Location = new System.Drawing.Point(27, 234);
+            this.groupBox_ProfileLoadSave.Name = "groupBox_ProfileLoadSave";
+            this.groupBox_ProfileLoadSave.Size = new System.Drawing.Size(166, 38);
+            this.groupBox_ProfileLoadSave.TabIndex = 100014;
+            this.groupBox_ProfileLoadSave.TabStop = false;
+            this.groupBox_ProfileLoadSave.Text = "Profiles";
+            this.groupBox_ProfileLoadSave.MouseHover += new System.EventHandler(this.ToolTips_Show);
+            // 
+            // checkBox_FastProfileLoadAndSave
+            // 
+            this.checkBox_FastProfileLoadAndSave.AutoSize = true;
+            this.checkBox_FastProfileLoadAndSave.Location = new System.Drawing.Point(8, 15);
+            this.checkBox_FastProfileLoadAndSave.Name = "checkBox_FastProfileLoadAndSave";
+            this.checkBox_FastProfileLoadAndSave.Size = new System.Drawing.Size(135, 17);
+            this.checkBox_FastProfileLoadAndSave.TabIndex = 0;
+            this.checkBox_FastProfileLoadAndSave.Text = "Fast Profile Load/Save";
+            this.checkBox_FastProfileLoadAndSave.UseVisualStyleBackColor = true;
+            this.checkBox_FastProfileLoadAndSave.CheckedChanged += new System.EventHandler(this.Save_FastProfileLoadAndSave);
+            this.checkBox_FastProfileLoadAndSave.MouseHover += new System.EventHandler(this.ToolTips_Show);
+            // 
             // groupBox_RRSpeed
             // 
             this.groupBox_RRSpeed.Controls.Add(this.nUpDown_RiffRepeaterSpeed);
@@ -4448,7 +4525,7 @@
             // 
             this.nUpDown_ASIO_InputMic_Channel.Location = new System.Drawing.Point(338, 28);
             this.nUpDown_ASIO_InputMic_Channel.Maximum = new decimal(new int[] {
-            64,
+            255,
             0,
             0,
             0});
@@ -4524,7 +4601,7 @@
             // 
             this.nUpDown_ASIO_Output_AltBaseChannel.Location = new System.Drawing.Point(338, 52);
             this.nUpDown_ASIO_Output_AltBaseChannel.Maximum = new decimal(new int[] {
-            64,
+            255,
             0,
             0,
             0});
@@ -4615,7 +4692,7 @@
             // 
             this.nUpDown_ASIO_Output_BaseChannel.Location = new System.Drawing.Point(338, 28);
             this.nUpDown_ASIO_Output_BaseChannel.Maximum = new decimal(new int[] {
-            64,
+            255,
             0,
             0,
             0});
@@ -4746,7 +4823,7 @@
             // 
             this.nUpDown_ASIO_Input1_Channel.Location = new System.Drawing.Point(338, 28);
             this.nUpDown_ASIO_Input1_Channel.Maximum = new decimal(new int[] {
-            64,
+            255,
             0,
             0,
             0});
@@ -4877,7 +4954,7 @@
             // 
             this.nUpDown_ASIO_Input0_Channel.Location = new System.Drawing.Point(338, 28);
             this.nUpDown_ASIO_Input0_Channel.Maximum = new decimal(new int[] {
-            64,
+            255,
             0,
             0,
             0});
@@ -4951,8 +5028,9 @@
             this.checkBox_ASIO_WASAPI_Output.Size = new System.Drawing.Size(125, 17);
             this.checkBox_ASIO_WASAPI_Output.TabIndex = 0;
             this.checkBox_ASIO_WASAPI_Output.Text = "Use WASAPI Output";
+            this.checkBox_ASIO_WASAPI_Output.ThreeState = true;
             this.checkBox_ASIO_WASAPI_Output.UseVisualStyleBackColor = true;
-            this.checkBox_ASIO_WASAPI_Output.CheckedChanged += new System.EventHandler(this.ASIO_WASAPI_Output);
+            this.checkBox_ASIO_WASAPI_Output.CheckStateChanged += new System.EventHandler(this.ASIO_WASAPI_Output);
             this.checkBox_ASIO_WASAPI_Output.MouseHover += new System.EventHandler(this.ToolTips_Show);
             // 
             // groupBox_ASIO_BufferSize
@@ -4990,12 +5068,12 @@
             0});
             this.nUpDown_ASIO_CustomBufferSize.Location = new System.Drawing.Point(20, 129);
             this.nUpDown_ASIO_CustomBufferSize.Maximum = new decimal(new int[] {
-            496,
+            65536,
             0,
             0,
             0});
             this.nUpDown_ASIO_CustomBufferSize.Minimum = new decimal(new int[] {
-            16,
+            1,
             0,
             0,
             0});
@@ -5003,7 +5081,7 @@
             this.nUpDown_ASIO_CustomBufferSize.Size = new System.Drawing.Size(120, 20);
             this.nUpDown_ASIO_CustomBufferSize.TabIndex = 3;
             this.nUpDown_ASIO_CustomBufferSize.Value = new decimal(new int[] {
-            16,
+            48,
             0,
             0,
             0});
@@ -5069,7 +5147,7 @@
             this.label_Rocksmith_Thanks.Name = "label_Rocksmith_Thanks";
             this.label_Rocksmith_Thanks.Size = new System.Drawing.Size(574, 34);
             this.label_Rocksmith_Thanks.TabIndex = 4;
-            this.label_Rocksmith_Thanks.Text = "Thank you Ubisoft San Fransisco for creating Rocksmith 1, and Rocksmith 2014.\r\nMo" +
+            this.label_Rocksmith_Thanks.Text = "Thank you Ubisoft San Francisco for creating Rocksmith 1, and Rocksmith 2014.\r\nMo" +
     "st of the tooltips from this section are from their documentation provided with " +
     "the game.";
             // 
@@ -5077,6 +5155,7 @@
             // 
             this.groupBox_Rocksmith_AudioSettings.Controls.Add(this.checkBox_Rocksmith_LowLatencyMode);
             this.groupBox_Rocksmith_AudioSettings.Controls.Add(this.checkBox_Rocksmith_RTCOnly);
+            this.groupBox_Rocksmith_AudioSettings.Controls.Add(this.checkBox_Rocksmith_RightInputChannel);
             this.groupBox_Rocksmith_AudioSettings.Controls.Add(this.checkBox_Rocksmith_DumpAudioLog);
             this.groupBox_Rocksmith_AudioSettings.Controls.Add(this.checkBox_Rocksmith_ForceDirextXSink);
             this.groupBox_Rocksmith_AudioSettings.Controls.Add(this.checkBox_Rocksmith_ForceWDM);
@@ -5117,6 +5196,18 @@
             this.checkBox_Rocksmith_RTCOnly.UseVisualStyleBackColor = true;
             this.checkBox_Rocksmith_RTCOnly.CheckedChanged += new System.EventHandler(this.Rocksmith_RTCOnly);
             this.checkBox_Rocksmith_RTCOnly.MouseHover += new System.EventHandler(this.ToolTips_Show);
+            // 
+            // checkBox_Rocksmith_RightInputChannel
+            // 
+            this.checkBox_Rocksmith_RightInputChannel.AutoSize = true;
+            this.checkBox_Rocksmith_RightInputChannel.Location = new System.Drawing.Point(156, 189);
+            this.checkBox_Rocksmith_RightInputChannel.Name = "checkBox_Rocksmith_RightInputChannel";
+            this.checkBox_Rocksmith_RightInputChannel.Size = new System.Drawing.Size(122, 17);
+            this.checkBox_Rocksmith_RightInputChannel.TabIndex = 16;
+            this.checkBox_Rocksmith_RightInputChannel.Text = "Right Input Channel";
+            this.checkBox_Rocksmith_RightInputChannel.UseVisualStyleBackColor = true;
+            this.checkBox_Rocksmith_RightInputChannel.CheckedChanged += new System.EventHandler(this.Rocksmith_RightInputChannel);
+            this.checkBox_Rocksmith_RightInputChannel.MouseHover += new System.EventHandler(this.ToolTips_Show);
             // 
             // checkBox_Rocksmith_DumpAudioLog
             // 
@@ -5284,7 +5375,7 @@
             this.checkBox_Rocksmith_EnableRenderRes.Name = "checkBox_Rocksmith_EnableRenderRes";
             this.checkBox_Rocksmith_EnableRenderRes.Size = new System.Drawing.Size(160, 17);
             this.checkBox_Rocksmith_EnableRenderRes.TabIndex = 11;
-            this.checkBox_Rocksmith_EnableRenderRes.Text = "Seperate Render Resolution";
+            this.checkBox_Rocksmith_EnableRenderRes.Text = "Separate Render Resolution";
             this.checkBox_Rocksmith_EnableRenderRes.UseVisualStyleBackColor = true;
             this.checkBox_Rocksmith_EnableRenderRes.CheckedChanged += new System.EventHandler(this.Rocksmith_EnableRenderRes);
             // 
@@ -6887,27 +6978,6 @@
             this.button_UpdateRSMods.Click += new System.EventHandler(this.CheckForUpdates_UpdateRSMods);
             this.button_UpdateRSMods.MouseHover += new System.EventHandler(this.ToolTips_Show);
             // 
-            // groupBox_ToggleFingerprints
-            // 
-            this.groupBox_ToggleFingerprints.Location = new System.Drawing.Point(6, 164);
-            this.groupBox_ToggleFingerprints.Name = "groupBox_ToggleFingerprints";
-            this.groupBox_ToggleFingerprints.Size = new System.Drawing.Size(168, 51);
-            this.groupBox_ToggleFingerprints.TabIndex = 71;
-            this.groupBox_ToggleFingerprints.TabStop = false;
-            this.groupBox_ToggleFingerprints.Text = "Toggle Fingerprints";
-            this.groupBox_ToggleFingerprints.Visible = false;
-            // 
-            // checkBox_ToggleFingerprints
-            // 
-            this.checkBox_RemoveFingerprints.AutoSize = true;
-            this.checkBox_RemoveFingerprints.Location = new System.Drawing.Point(11, 446);
-            this.checkBox_RemoveFingerprints.Name = "checkBox_ToggleFingerprints";
-            this.checkBox_RemoveFingerprints.Size = new System.Drawing.Size(123, 17);
-            this.checkBox_RemoveFingerprints.TabIndex = 0;
-            this.checkBox_RemoveFingerprints.Text = "Remove Fingerprints";
-            this.checkBox_RemoveFingerprints.UseVisualStyleBackColor = true;
-            this.checkBox_RemoveFingerprints.CheckedChanged += new System.EventHandler(this.Save_RemoveFingerprints);
-            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -7011,6 +7081,8 @@
             this.groupBox_Backups.ResumeLayout(false);
             this.groupBox_Backups.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nUpDown_NumberOfBackups)).EndInit();
+            this.groupBox_ProfileLoadSave.ResumeLayout(false);
+            this.groupBox_ProfileLoadSave.PerformLayout();
             this.groupBox_RRSpeed.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.nUpDown_RiffRepeaterSpeed)).EndInit();
             this.groupBox_ControlVolumeIncrement.ResumeLayout(false);
@@ -8003,6 +8075,7 @@
         private System.Windows.Forms.GroupBox groupBox_StringColors;
         private System.Windows.Forms.RadioButton radio_colorBlindERStringColors;
         private System.Windows.Forms.RadioButton radio_DefaultStringColors;
+        private System.Windows.Forms.CheckBox checkBox_UseExactColors;
         private System.Windows.Forms.NumericUpDown nUpDown_ForceEnumerationXMS;
         private System.Windows.Forms.Label label_ForceEnumerationXMS;
         private System.Windows.Forms.CheckBox checkBox_CustomColors;
@@ -8234,6 +8307,7 @@
         private System.Windows.Forms.CheckBox checkBox_Rocksmith_ForceWDM;
         private System.Windows.Forms.CheckBox checkBox_Rocksmith_ExclusiveMode;
         private System.Windows.Forms.CheckBox checkBox_Rocksmith_RTCOnly;
+        private System.Windows.Forms.CheckBox checkBox_Rocksmith_RightInputChannel;
         private System.Windows.Forms.CheckBox checkBox_Rocksmith_DumpAudioLog;
         private System.Windows.Forms.CheckBox checkBox_Rocksmith_LowLatencyMode;
         private System.Windows.Forms.CheckBox checkBox_Rocksmith_EnableRenderRes;
@@ -8266,6 +8340,8 @@
         private System.Windows.Forms.CheckBox checkBox_BackupProfile;
         private System.Windows.Forms.GroupBox groupBox_Backups;
         private System.Windows.Forms.CheckBox checkBox_UnlimitedBackups;
+        private System.Windows.Forms.GroupBox groupBox_ProfileLoadSave;
+        private System.Windows.Forms.CheckBox checkBox_FastProfileLoadAndSave;
         private System.Windows.Forms.NumericUpDown nUpDown_NumberOfBackups;
         private System.Windows.Forms.CheckBox checkBox_RainbowNotes;
         private System.Windows.Forms.Label label_RainbowNotesKey;
@@ -8476,6 +8552,7 @@
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Button btnSaveFontSize;
         private System.Windows.Forms.CheckBox checkBox_PreventMidSongPause;
+        private System.Windows.Forms.CheckBox checkBox_Ultrawide;
         private System.Windows.Forms.GroupBox groupBox_ToggleFingerprints;
         private System.Windows.Forms.CheckBox checkBox_RemoveFingerprints;
         private System.Windows.Forms.TabPage tab_QCAutomation;

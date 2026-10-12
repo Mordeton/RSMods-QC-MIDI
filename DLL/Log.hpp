@@ -1,13 +1,15 @@
 #pragma once
 
-/// If changing this file, be sure to do a clean build, else some changes might not go into effect.
-
-#pragma once
 #include <iostream>
 #include <string>
 #include <ctime>
 #include <sstream>
+#include <format>
 #include <mutex>
+#include <cstdio>
+#ifdef _WIN32
+#include <share.h>
+#endif
 
 /// <summary>
 /// Classification of the logs level.
@@ -52,14 +54,47 @@ public:
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
+    ~Logger() {
+        std::lock_guard lock(mutex);
+        if (fileHandle) {
+            fclose(fileHandle);
+            fileHandle = nullptr;
+        }
+    }
+
+    /// <summary>
+    /// Open a log file on disk with full sharing permissions (_SH_DENYNO) so
+    /// external applications and users can view it while the game is running.
+    /// </summary>
+    void InitFile(const std::string& path) {
+        std::lock_guard lock(mutex);
+        if (fileHandle) {
+            fclose(fileHandle);
+            fileHandle = nullptr;
+        }
+#ifdef _WIN32
+        fileHandle = _fsopen(path.c_str(), "w", _SH_DENYNO);
+#else
+        fileHandle = std::fopen(path.c_str(), "w");
+#endif
+    }
+
     /// <summary>
     /// Log a message with automatic header generation.
     /// </summary>
     template <typename T>
     void Log(const T& message, LogLevel level = LogSettings::defaultLogLevel) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::lock_guard lock(mutex);
 
         std::string header = GenerateHeader(level);
+
+        if (fileHandle) {
+            std::ostringstream ss;
+            ss << header << message;
+            const std::string str = ss.str();
+            fwrite(str.data(), 1, str.size(), fileHandle);
+            fflush(fileHandle);
+        }
 
         std::cerr << header << message;
 
@@ -73,7 +108,15 @@ public:
     /// </summary>
     template <typename T>
     void LogNoHeader(const T& message) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::lock_guard lock(mutex);
+
+        if (fileHandle) {
+            std::ostringstream ss;
+            ss << message;
+            const std::string str = ss.str();
+            fwrite(str.data(), 1, str.size(), fileHandle);
+            fflush(fileHandle);
+        }
 
         std::cerr << message;
 
@@ -97,23 +140,22 @@ private:
     Logger() = default;
 
     std::string GenerateHeader(LogLevel level) {
-        std::ostringstream header;
-
         double timeSinceStart = static_cast<double>(clock() - LogSettings::startupTime) / CLOCKS_PER_SEC;
-        header << std::fixed << std::setprecision(2) << timeSinceStart << " ";
 
+        const char* levelStr;
         switch (level) {
-            case LogLevel::Debug:   header << "[DEBUG] ";   break;
-            case LogLevel::Info:    header << "[INFO] ";    break;
-            case LogLevel::Warning: header << "[WARNING] "; break;
-            case LogLevel::Error:   header << "[ERROR] ";   break;
-            default:                header << "[UNKNOWN] "; break;
+            case LogLevel::Debug:   levelStr = "[DEBUG] ";   break;
+            case LogLevel::Info:    levelStr = "[INFO] ";    break;
+            case LogLevel::Warning: levelStr = "[WARNING] "; break;
+            case LogLevel::Error:   levelStr = "[ERROR] ";   break;
+            default:                levelStr = "[UNKNOWN] "; break;
         }
 
-        return header.str();
+        return std::format("{:.2f} {}", timeSinceStart, levelStr);
     }
 
     LogLevel currentLevel = LogSettings::defaultLogLevel;
+    FILE* fileHandle = nullptr;
     std::mutex mutex; 
 };
 

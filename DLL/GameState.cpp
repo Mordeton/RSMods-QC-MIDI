@@ -61,9 +61,7 @@ bool IsSongKeyStringValid(const char* str, size_t max_len)
 		return false;
 
 	std::string_view sv(str, strLen);
-
-	constexpr std::string_view prefix = "Play_";
-	return sv.size() >= prefix.size() && sv.substr(0, prefix.size()) == prefix;
+	return sv.starts_with("Play_");
 }
 
 bool IsArrangementIdStringValid(const char* str, size_t maxLen)
@@ -146,12 +144,12 @@ std::string GameState::GetCurrentMenu(bool GameNotLoaded) {
 		if (preMainMenuAdr)
 		{
 			// I.e. check if its neither one of the possible states
-			std::string currentMenu((char*)preMainMenuAdr);
+			std::string menuName((char*)preMainMenuAdr);
 
-			if (lastMenu == "TitleScreen" && lastMenu != currentMenu)
+			if (lastMenu == "TitleScreen" && lastMenu != menuName)
 				canGetRealMenu = true;
 			else {
-				lastMenu = currentMenu;
+				lastMenu = menuName;
 				return "pre_enter_prompt";
 			}
 		}
@@ -174,8 +172,8 @@ std::string GameState::GetCurrentMenu(bool GameNotLoaded) {
 		return "where are we actually";
 	}
 
-	std::string currentMenu((char*)currentMenuAddr);
-	return currentMenu;
+	std::string menuName((char*)currentMenuAddr);
+	return menuName;
 }
 
 /// <summary>
@@ -184,16 +182,16 @@ std::string GameState::GetCurrentMenu(bool GameNotLoaded) {
 /// <param name="enabled"> - Should we turn on colors or turn off?</param>
 void GameState::ToggleCB(bool enabled) {
 	uintptr_t addrTimer = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_timer, Offsets::ptr_timerBaseOffsets);
-	uintptr_t cbEnabled = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_colorBlindMode, Offsets::ptr_colorBlindModeOffsets);
+	uintptr_t cbEnabledAddr = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_colorBlindMode, Offsets::ptr_colorBlindModeOffsets);
 
-	if (!addrTimer || !cbEnabled) {
+	if (!addrTimer || !cbEnabledAddr) {
 		// LOG_ERROR("Invalid Pointers: ToggleCB(" << std::boolalpha << enabled << ")" << std::endl); // Disabled because it causes log to get huge real quick
 		return;
 	}
 
 	// JIC, no need to write the same value constantly
-	if (*(byte*)cbEnabled != (byte)enabled)
-		*(byte*)cbEnabled = enabled;
+	if (*(byte*)cbEnabledAddr != (byte)enabled)
+		*(byte*)cbEnabledAddr = enabled;
 }
 
 namespace GameState {
@@ -236,6 +234,10 @@ namespace GameState {
 
 		bool IsInOnlineModes() {
 			return Contains(currentMenu, onlineModes);
+		}
+
+		bool IsInGuitarcadeGame() {
+			return Contains(currentMenu, guitarcadeGameModes);
 		}
 
 		bool IsInLASPlayingModes() {

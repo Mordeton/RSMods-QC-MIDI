@@ -1,4 +1,8 @@
 #pragma once
+#include <atomic>
+#include <format>
+#include <unordered_map>
+
 #include "../Mods/ExtendedRangeMode.hpp"
 
 namespace D3DHooks {
@@ -13,27 +17,46 @@ namespace D3DHooks {
 	inline UINT NumElements;
 
 	inline IDirect3DVertexShader9* vShader;
-	inline UINT vSize;
 
 	inline IDirect3DPixelShader9* pShader;
-	inline UINT pSize;
 
 	inline IDirect3DTexture9* texture;
 	inline D3DSURFACE_DESC sDesc;
 	inline D3DLOCKED_RECT pLockedRect;
 
-	inline LPDIRECT3DVERTEXBUFFER9 Stream_Data;
-	inline UINT Offset = 0;
 	inline UINT vertexBufferSize;
 
 	inline bool debug = true;
 
-	inline bool regenerateUserDefinedTexture = false;
+	inline std::atomic_bool regenerateUserDefinedTexture = false;
 	
 	inline HWND hThisWnd = NULL;
 	inline WNDPROC oWndProc = NULL;
 
-	inline bool cachedIsInSong = false;
+	// GameState::IsInSong(), refreshed once per frame in Hook_EndScene. Read per draw by Hook_DIP
+	// and by WndProc, which can run on another thread.
+	inline std::atomic<bool> cachedIsInSong = false;
+
+	// Ultrawide aspect correction.
+	inline std::atomic<bool> ultrawideActive = false;   // The setting is on and the backbuffer is wider than 16:9: corrections apply.
+
+	// True while a Guitarcade minigame is being played or paused. Evaluated once
+	// per frame in UpdateUltrawideState because the underlying GameState query is
+	// a string comparison and the draw path reads this per draw.
+	inline std::atomic<bool> ultrawideInGuitarcade = false;
+	inline std::atomic<bool> ultrawideInVideoPlayer = false; // The video player composites at its own aspect.
+	inline std::atomic<bool> ultrawideSettingOn = false; // Published by UltrawideMod (mod thread) from the Ultrawide setting. The source of the flag above.
+	inline float ultrawideClipXScale = 1.0f; // (16/9) / the display aspect: how far the interface has to be squeezed back in.
+	inline std::unordered_map<void*, std::pair<UINT, UINT>> ultrawideRenderTargetTextures; // Render thread only: every texture that has been a render target, with its size. Scene-aspect ones mark post-processing draws; off-aspect ones (text strips) mark 16:9 UI.
+	inline bool ultrawideBackBufferValid = false;
+	inline UINT ultrawideBackBufferWidth = 0;
+	inline UINT ultrawideBackBufferHeight = 0;
+	inline bool ultrawideRenderTargetIsScene = false;
+	inline UINT ultrawideRenderTargetWidth = 0;
+	inline UINT ultrawideRenderTargetHeight = 0;
+
+	void UpdateUltrawideState(IDirect3DDevice9* pDevice);
+	void SyncStreamSourceMirror(IDirect3DDevice9* pDevice);
 
 	HRESULT APIENTRY Hook_SetVertexDeclaration(LPDIRECT3DDEVICE9 pDevice, IDirect3DVertexDeclaration9* pdecl);
 	HRESULT APIENTRY Hook_DP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, UINT StartIndex, UINT PrimCount);
@@ -42,7 +65,12 @@ namespace D3DHooks {
 	HRESULT APIENTRY Hook_SetPixelShader(LPDIRECT3DDEVICE9 pDevice, IDirect3DPixelShader9* piShader);
 	HRESULT APIENTRY Hook_SetStreamSource(LPDIRECT3DDEVICE9 pDevice, UINT StreamNumber, IDirect3DVertexBuffer9* pStreamData, UINT OffsetInBytes, UINT Stride);
 	HRESULT APIENTRY Hook_Reset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters);
+	HRESULT APIENTRY Hook_StretchRect(LPDIRECT3DDEVICE9 pDevice, IDirect3DSurface9* pSourceSurface, const RECT* pSourceRect, IDirect3DSurface9* pDestSurface, const RECT* pDestRect, D3DTEXTUREFILTERTYPE Filter);
+	HRESULT APIENTRY Hook_SetRenderTarget(LPDIRECT3DDEVICE9 pDevice, DWORD RenderTargetIndex, IDirect3DSurface9* pRenderTarget);
+	HRESULT APIENTRY Hook_SetTexture(LPDIRECT3DDEVICE9 pDevice, DWORD Stage, IDirect3DBaseTexture9* pTexture);
 	HRESULT APIENTRY Hook_DIP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT StartIndex, UINT PrimCount);
+	HRESULT APIENTRY Hook_DrawPrimitiveUP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, UINT PrimCount, const void* pVertexStreamZeroData, UINT VertexStreamZeroStride);
+	HRESULT APIENTRY Hook_DrawIndexedPrimitiveUP(IDirect3DDevice9* pDevice, D3DPRIMITIVETYPE PrimType, UINT MinVertexIndex, UINT NumVertices, UINT PrimCount, const void* pIndexData, D3DFORMAT IndexDataFormat, const void* pVertexStreamZeroData, UINT VertexStreamZeroStride);
 	HRESULT APIENTRY Hook_EndScene(IDirect3DDevice9* pDevice);
 
 	// Mod Settings
@@ -55,7 +83,7 @@ namespace D3DHooks {
 	inline bool GreenScreenWall = false; // If true, set the Greenscreen wall up. This helps call it in Lesson mode for No-Loft users (True - Black wall, False - Loft)
 	inline bool RemoveLyrics = false; // If true, remove the lyrics from Learn A Song & Non-stop Play. (True - No Lyrics, False - Keep Lyrics)
 	
-	inline bool RemoveHeadstockInThisMenu = false; // If true, the headstock of the guitar / bass will be disabled in this menu. (True - No Headstock, False - Keep Headstock)
+	inline std::atomic<bool> RemoveHeadstockInThisMenu = false; // If true, the headstock of the guitar / bass will be disabled in this menu. (True - No Headstock, False - Keep Headstock)
 	inline bool showSongTimerOnScreen = false; // If true, the current song timer will be shown in the top-right of the screen. This will only work when inside a song. (True - Show, False - Hide)
 	inline bool DiscoModeEnabled = false; // If true, we do the trippy effects that disco mode is known for (True - Disco, False - Normal).
 	inline std::map<IDirect3DDevice9*, std::pair<DWORD, DWORD>> DiscoModeInitialSetting; // List of all the pDevices that have been affected by Disco Mode
@@ -64,8 +92,8 @@ namespace D3DHooks {
 	inline bool RainbowNotes = false; // If true, the notes will turn rainbow along with the stems
 	inline bool AutomatedSelectedVolume = false; // If true, we will always show the selected volume.
 
-	inline bool RecreateTextures = false; // User has triggered an update, so we need to re-create textures.
-	inline bool RecreateTextureTimer = false; // If user spams recreating textures then we end up with a lot of memory usage. Limit how often we update textures.
+	inline std::atomic_bool RecreateTextures = false; // User has triggered an update, so we need to re-create textures.
+	inline std::atomic_bool RecreateTextureTimer = false; // If user spams recreating textures then we end up with a lot of memory usage. Limit how often we update textures.
 
 	// Dev Functions
 	inline bool startLogging = false; // Should we log what's happening in Hook_DIP? Logs to log.txt in your RS2014 directory
@@ -80,6 +108,9 @@ namespace D3DHooks {
 	/// <returns>std::string of time in "h:m:s" format.</returns>
 	std::string ConvertFloatTimeToStringTime(float timeInSeconds);
 	void RegenerateTwitchNoteColors(IDirect3DDevice9* pDevice);
+
+	// Refreshes the headstock texture cache based on the current/previous menu. Call once per menu tick.
+	void UpdateHeadstockCacheForMenu();
 
 	inline HWND cachedGameHwnd = nullptr;
 	inline HWND GetGameWindow() {
@@ -105,11 +136,23 @@ inline tBeginScene oBeginScene;
 typedef HRESULT(WINAPI* tDrawPrimitive)(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT);
 inline tDrawPrimitive oDrawPrimitive;
 
+typedef HRESULT(APIENTRY* tDrawPrimitiveUP)(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, const void*, UINT);
+inline tDrawPrimitiveUP oDrawPrimitiveUP;
+
+typedef HRESULT(APIENTRY* tDrawIndexedPrimitiveUP)(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT, UINT, const void*, D3DFORMAT, const void*, UINT);
+inline tDrawIndexedPrimitiveUP oDrawIndexedPrimitiveUP;
+
 typedef HRESULT(__stdcall* tEndScene)(IDirect3DDevice9*);
 inline tEndScene oEndScene;
 
 typedef HRESULT(APIENTRY* tReset)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
 inline tReset oReset;
+
+typedef HRESULT(APIENTRY* tStretchRect)(IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const RECT*, D3DTEXTUREFILTERTYPE);
+inline tStretchRect oStretchRect;
+
+typedef HRESULT(APIENTRY* tSetRenderTarget)(IDirect3DDevice9*, DWORD, IDirect3DSurface9*);
+inline tSetRenderTarget oSetRenderTarget;
 
 typedef HRESULT(APIENTRY* tSetStreamSource)(IDirect3DDevice9*, UINT, IDirect3DVertexBuffer9*, UINT, UINT);
 inline tSetStreamSource oSetStreamSource;

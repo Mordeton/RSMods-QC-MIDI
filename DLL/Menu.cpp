@@ -3,6 +3,7 @@
 #include "Mods/AudioDevices.hpp"
 #include "Mods/VoiceOverControl.hpp"
 #include "Mods/Midi.hpp"
+#include "Framework/Framework.hpp"
 
 namespace Menu {
 	void GenerateTestingTextures(IDirect3DDevice9* pDevice) {
@@ -90,7 +91,7 @@ namespace Menu {
 
 		LOG_INFO("ImGUI Init" << std::endl);
 
-		Settings::UpdateSettings();
+		Framework::Registry().EnqueueSettingsUpdate([] { Settings::UpdateSettings(); });
 
 		CreateTextures(pDevice);
 	}
@@ -154,7 +155,7 @@ namespace Menu {
 		{
 			for (size_t i = 0; i < Midi::NumberOfOutPorts; ++i)
 			{
-				const bool isSelected = (selectedDevice == i);
+				const bool isSelected = (selectedDevice == static_cast<int>(i));
 				const auto& device = Midi::midiOutDevices[i];
 
 				if (ImGui::Selectable(device.szPname, isSelected, ImGuiSelectableFlags_DontClosePopups))
@@ -176,10 +177,10 @@ namespace Menu {
 		ImGui::SliderInt("Control Change", &Midi::MidiCC, 0, 127);
 
 		if (ImGui::Button("Send PC MIDI Message"))
-			Midi::SendDataToThread_PC(Midi::MidiPC);
+			Midi::SendDataToThread_PC(Midi::AsMidiByte(Midi::MidiPC));
 
 		if (ImGui::Button("Send CC MIDI Message"))
-			Midi::SendDataToThread_CC(Midi::MidiCC);
+			Midi::SendDataToThread_CC(Midi::AsMidiByte(Midi::MidiCC));
 	}
 
 	void AddCalibrationMenu() {

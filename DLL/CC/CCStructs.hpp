@@ -4,9 +4,6 @@
 #include "CCEnums.hpp"
 #include "../Lib/Json/json.hpp"
 
-using namespace CrowdControl::Enums;
-using nlohmann::json;
-
 namespace CrowdControl::Structs {
 	struct Request {
 		/**
@@ -22,7 +19,7 @@ namespace CrowdControl::Structs {
 		/**
 		 * \brief This field contains any parameters the user has selected.
 		 */
-		json parameters;
+		nlohmann::json parameters;
 		/**
 		 * \brief The displayable name of the viewer who requested the effect.
 		 */
@@ -38,7 +35,7 @@ namespace CrowdControl::Structs {
 		/**
 		 * \brief The type of message. See RequestType enum.
 		 */
-		RequestType type;
+		Enums::RequestType type;
 	};
 
 	struct Response {
@@ -53,7 +50,7 @@ namespace CrowdControl::Structs {
 		/**
 		 * \brief Indicates the status of the effect request or class.
 		 */
-		EffectStatus status;
+		Enums::EffectStatus status;
 		/**
 		 * \brief The requested duration of the effect, in milliseconds.
 		 */
@@ -61,6 +58,6 @@ namespace CrowdControl::Structs {
 		/**
 		 * \brief Indicates the type of message. See ResponseType enum below.
 		 */
-		ResponseType type;
+		Enums::ResponseType type;
 	};
 }

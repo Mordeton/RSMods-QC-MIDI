@@ -9,8 +9,10 @@ namespace CrowdControl::Effects {
 			duration_ms = durationMilliseconds;
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
-		EffectStatus Stop() override;
+		Enums::EffectStatus Test(const Structs::Request& request) override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 	};
 }

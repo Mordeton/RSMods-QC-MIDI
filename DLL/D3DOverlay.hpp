@@ -12,7 +12,7 @@
 
 namespace GameOverlay {
 	Resolution GetWindowSize();
-	void DX9DrawText(const std::string& textToDraw, int textColorHex, int topLeftX, int topLeftY, int bottomRightX, int bottomRightY, LPDIRECT3DDEVICE9 pDevice, Resolution setFontSize = { NULL, NULL }, DWORD format = DT_LEFT | DT_NOCLIP);
+	void DX9DrawText(const std::string& textToDraw, int textColorHex, int topLeftX, int topLeftY, int bottomRightX, int bottomRightY, LPDIRECT3DDEVICE9 overlayDevice, Resolution setFontSize = { NULL, NULL }, DWORD format = DT_LEFT | DT_NOCLIP);
 
 	inline HRESULT CustomDX9Font = NULL;
 	inline ID3DXFont* DX9FontEncapsulation = NULL;
@@ -32,26 +32,19 @@ namespace GameOverlay {
 	void DisplaySongAccuracy();
 	void CheckCurrentFont();
 	void RenderOverlay(IDirect3DDevice9* pDevice);
-
-	const inline std::vector<std::string> mixerInternalNames = { // Needs to be char* as that's what SetRTPCValue needs.
-		{"Master_Volume"}, // Master Volume
-		{"Mixer_Music"}, // Song Volume
-		{"Mixer_Player1"}, // Player 1 Guitar & Bass (both are handled with this singular name)
-		{"Mixer_Player2"}, // Player 2 Guitar & Bass (both are handled with this singular name)
-		{"Mixer_Mic"}, // My Microphone Volume
-		{"Mixer_VO"}, // Rocksmith Dad Voice Over
-		{"Mixer_SFX"}, // Menu SFX Volume
-	};
-
-	const inline std::vector<std::string> drawMixerTextName = {
-		{"Master Volume: "},
-		{"Song Volume: "},
-		{"Player 1 Volume: "},
-		{"Player 2 Volume: "},
-		{"Microphone Volume: "},
-		{"Voice-Over Volume: "},
-		{"SFX Volume: "},
-	};
+  void OnLostDevice();
+	void OnResetDevice();
+  
+	struct MixerEntry { const char* channel; const char* label; };
+	inline constexpr std::array<MixerEntry, 7> mixerChannels = { {
+		{ Settings::Setting::Channel::Master,    "Master Volume: "     },
+		{ Settings::Setting::Channel::Music,     "Song Volume: "       },
+		{ Settings::Setting::Channel::Player1,   "Player 1 Volume: "   }, // covers both Guitar and Bass for P1
+		{ Settings::Setting::Channel::Player2,   "Player 2 Volume: "   }, // covers both Guitar and Bass for P2
+		{ Settings::Setting::Channel::Mic,       "Microphone Volume: " },
+		{ Settings::Setting::Channel::VoiceOver, "Voice-Over Volume: " }, // Rocksmith Dad VO
+		{ Settings::Setting::Channel::SFX,       "SFX Volume: "        },
+	} };
 
 	inline unsigned int currentVolumeIndex = 0; // Mixer volume to change. 0 - Master, 1 - Song, 2 - P1, 3 - P2, 4 - Mic, 5 - VO, 6 - SFX
 

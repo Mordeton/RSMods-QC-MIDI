@@ -1,5 +1,6 @@
 #include "../stdafx.h"
 #include "VolumeControl.hpp"
+namespace Setting = Settings::Setting;
 
 /// <summary>
 /// Increase Volume of Mixer's Backend
@@ -10,12 +11,6 @@ void VolumeControl::IncreaseVolume(int amountToIncrease, std::string mixerToIncr
 	float volume = 0;
 	RTPCValue_type type = RTPCValue_GameObject;
 
-	// Mixer sent is not a valid mixer.
-	if (!Contains(mixerToIncrease, mixerNames)) {
-		LOG_ERROR("That mixer doesn't exist" << std::endl);
-		return;
-	}
-
 	// Fill Volume Variable With Current Volume
 	Wwise::SoundEngine::Query::GetRTPCValue(mixerToIncrease.c_str(), AK_INVALID_GAME_OBJECT, &volume, &type); 
 
@@ -23,7 +18,7 @@ void VolumeControl::IncreaseVolume(int amountToIncrease, std::string mixerToIncr
 	if (volume <= (100.0f - amountToIncrease))
 		volume += amountToIncrease;
 	else
-		volume = 100.0f; // Incase the volume is within the amountToIncrease we can't throw it over 100.
+		volume = 100.0f; // In case the volume is within the amountToIncrease we can't throw it over 100.
 	
 	// Set Volume
 	Wwise::SoundEngine::SetRTPCValue(mixerToIncrease.c_str(), (float)volume, AK_INVALID_GAME_OBJECT, 0, AkCurveInterpolation_Linear);
@@ -41,12 +36,6 @@ void VolumeControl::DecreaseVolume(int amountToDecrease, std::string mixerToDecr
 	float volume = 0;
 	RTPCValue_type type = RTPCValue_GameObject;
 
-	// Mixer sent is not a valid mixer.
-	if (!Contains(mixerToDecrease, mixerNames)) {
-		LOG_ERROR("That mixer doesn't exist" << std::endl);
-		return;
-	}
-
 	// Fill Volume Variable With Current Volume
 	Wwise::SoundEngine::Query::GetRTPCValue(mixerToDecrease.c_str(), AK_INVALID_GAME_OBJECT, &volume, &type); 
 
@@ -54,7 +43,7 @@ void VolumeControl::DecreaseVolume(int amountToDecrease, std::string mixerToDecr
 	if (volume >= (0.0f + amountToDecrease))
 		volume -= amountToDecrease;
 	else
-		volume = 0.0f; // Incase the volume is within the amountToDecrease we can't throw it below 0.
+		volume = 0.0f; // In case the volume is within the amountToDecrease we can't throw it below 0.
 
 	// Set Volume
 	Wwise::SoundEngine::SetRTPCValue(mixerToDecrease.c_str(), (float)volume, AK_INVALID_GAME_OBJECT, 0, AkCurveInterpolation_Linear);
@@ -80,7 +69,7 @@ void VolumeControl::DisableSongPreviewAudio() {
 void VolumeControl::MutePlayer(bool player2) {
 	RTPCValue_type type = RTPCValue_GameObject;
 
-	const char* mixer = player2 ? "Mixer_Player2" : "Mixer_Player1";
+	const char* mixer = player2 ? Setting::Channel::Player2 : Setting::Channel::Player1;
 
 	// Save current volume.
 	if (player2)
@@ -102,10 +91,8 @@ void VolumeControl::MutePlayer(bool player2) {
 
 void VolumeControl::UnmutePlayer(bool player2)
 {
-	RTPCValue_type type = RTPCValue_GameObject;
+	const char* mixer = player2 ? Setting::Channel::Player2 : Setting::Channel::Player1;
 
-	const char* mixer = player2 ? "Mixer_Player2" : "Mixer_Player1";
-	
 	// Unmute
 	if (player2)
 	{
@@ -137,13 +124,14 @@ void VolumeControl::EnableSongPreviewAudio() {
 }
 
 /// <summary>
-/// Allows the user to play music in game while Alt+Tabbed.
+/// Keeps the song playing, with audio, while the user is Alt+Tabbed.
 /// </summary>
 void VolumeControl::AllowAltTabbingWithAudio() {
 	char patch[] = { 0x1 };
 
 	MemUtil::PatchAdr(Offsets::ptr_WindowNotInFocusValue, patch, 1); // Return with the value of 1, "window in focus", every time you alt+tab.
 	MemUtil::PatchAdr(Offsets::ptr_IsWindowInFocus, "\x01", 1);
+	MemUtil::PatchAdr(Offsets::func_FocusLostEvent, "\xC2\x04\x00", 3); // Return right away, so losing focus never pauses the song.
 
 	LOG_INFO("Allowed audio to be played in the background!" << std::endl);
 	allowedAltTabbingWithAudio = true;
@@ -151,13 +139,14 @@ void VolumeControl::AllowAltTabbingWithAudio() {
 
 
 /// <summary>
-/// Pauses the audio when the user Alt+Tabs. This is the standard behavior of Rocksmith 2014.
+/// Pauses the audio and the song when the user Alt+Tabs. This is the standard behavior of Rocksmith 2014.
 /// </summary>
 void VolumeControl::DisableAltTabbingWithAudio() {
 	char patch[] = { 0x0 };
 
 	MemUtil::PatchAdr(Offsets::ptr_WindowNotInFocusValue, patch, 1);  // Return with the value of 0, "window out of focus", every time you alt+tab.
 	MemUtil::PatchAdr(Offsets::ptr_IsWindowInFocus, "\x00", 1);
+	MemUtil::PatchAdr(Offsets::func_FocusLostEvent, "\x55\x8B\xEC", 3); // Original bytes.
 
 	LOG_INFO("Stopped audio from being played in the background!" << std::endl);
 	allowedAltTabbingWithAudio = false;

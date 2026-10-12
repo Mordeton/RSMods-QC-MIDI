@@ -1,5 +1,8 @@
 #include "stdafx.h"
 #include "Twitch.hpp"
+#include "Framework/Framework.hpp"
+
+namespace Setting = Settings::Setting;
 
 namespace Twitch {
 	/// <summary>
@@ -10,18 +13,17 @@ namespace Twitch {
 	/// <returns>BOOL. If effects triggered.</returns>
 	bool HandleMessage(std::string const& currMsg, std::string const& type) {
 		// Twitch wants Rainbow String mod.
-		if (Contains(currMsg, "RainbowStrings")) {
+		if (Contains(currMsg, Setting::Twitch::RainbowStrings)) {
 			ERMode::RainbowEnabled = type == "enable";
 		}
 
 		// Twitch wants Drunk Mode.
-		else if (Contains(currMsg, "DrunkMode")) {
+		else if (Contains(currMsg, Setting::Twitch::DrunkMode)) {
 			Loft::ToggleDrunkMode(type == "enable");
-			Settings::ParseTwitchToggle(currMsg, type);
 		}
 
 		// Twitch wants Solid Note colors.
-		else if (Contains(currMsg, "SolidNotes")) {
+		else if (Contains(currMsg, Setting::Twitch::SolidNotes)) {
 			// Don't apply any effects if we haven't even been in a song yet
 			if (!ERMode::ColorsSaved)
 				return false;
@@ -37,15 +39,21 @@ namespace Twitch {
 					twitchUserDefinedTexture = randomTextures[currentRandomTexture];
 				}
 				else {
-					Settings::ParseSolidColorsMessage(currMsg);
-					D3DHooks::regenerateUserDefinedTexture = true;
+					Framework::Registry().EnqueueSettingsUpdate([currMsg, type] {
+						Settings::ParseSolidColorsMessage(currMsg);
+						Settings::ParseTwitchToggle(currMsg, type);
+						D3DHooks::regenerateUserDefinedTexture = true;
+					});
+					return true;
 				}
 			}
 			else
 				ERMode::ResetAllStrings();
 		}
 
-		Settings::ParseTwitchToggle(currMsg, type);
+		Framework::Registry().EnqueueSettingsUpdate([currMsg, type] {
+			Settings::ParseTwitchToggle(currMsg, type);
+		});
 		return true;
 	}
 
@@ -81,12 +89,12 @@ namespace Twitch {
 		LOG_INFO("Disabling " << effectName << std::endl);
 
 		if (Contains(effectName, enabledEffects)) // JIC
-			enabledEffects.erase(std::find(enabledEffects.begin(), enabledEffects.end(), effectName));
+			std::erase(enabledEffects, effectName);
 	}
 
-	static bool IsCurrentEffectAlreadyAppliedOrNotInSong(const std::string& effectName)
+	bool IsCurrentEffectAlreadyAppliedOrNotInSong(const std::string& effectName)
 	{
-		return Contains(effectName, enabledEffects) && !GameState::IsInSong();
+		return Contains(effectName, enabledEffects) || !GameState::IsInSong();
 	}
 
 	void ParseEffectQueue() {

@@ -9,12 +9,13 @@ void SaveSteamServicePointer(uint32_t eax) {
 }
 
 uint32_t hookBackAddr;
+uint32_t pushedPrologueValue;
 
 void __declspec(naked) Hook_EnumerationService() {
 	__asm {
 		push ebp
 		mov ebp, esp
-		and esp, 0FFFFFFF8h
+		push dword ptr[pushedPrologueValue]
 
 		pushad
 
@@ -33,7 +34,7 @@ void Enumeration::HookEnumerationService() {
 	uint32_t BaseTextAddress = MemUtil::GetTextSectionAddress();
 
 	const char* sig = "\x55\x8B\xEC\x6A\x00\x68\x00\x00\x00\x00\x64\xA1\x00\x00\x00\x00\x50\x83\xEC\x00\xA1\x00\x00\x00\x00\x33\xC5\x89\x45\x00\x53\x57\x50\x8D\x45\x00\x64\xA3\x00\x00\x00\x00\x33\xDB\x38\x5E\x00\x0F\x84";
-	char* mask = "xxxx?x????xx????xxx?x????xxxx?xxxxx?xx????xxxx?xx";
+	const char* mask = "xxxx?x????xx????xxx?x????xxxx?xxxxx?xx????xxxx?xx";
 
 	uint32_t hookAddr = MemUtil::FindPattern<uint32_t>(BaseTextAddress, (size_t)MemUtil::GetTextSectionLength(), (uint8_t*)sig, mask);
 	short len = 0x5;
@@ -44,6 +45,8 @@ void Enumeration::HookEnumerationService() {
 	}
 
 	hookBackAddr = hookAddr + len;
+	pushedPrologueValue = (uint32_t)(int32_t)*(int8_t*)(hookAddr + 4); // The imm8 of `push imm8`, at offset 4 of the signature.
+
 	if (MemUtil::PlaceHook((void*)hookAddr, Hook_EnumerationService, len)) {
 		LOG_INFO("Hooked Steam enumeration function successfully!" << std::endl);
 	}
@@ -86,6 +89,11 @@ int Enumeration::GetFileCount(std::filesystem::path path) {
 int Enumeration::GetCurrentDLCCount() {
 	std::filesystem::path dlcFolderPath = std::filesystem::current_path(); //tread carefully, this stuff likes to crash if the path is wrong
 	dlcFolderPath /= "dlc";
+
+	// If the user does not have a dlc folder, return 0.
+	if (!std::filesystem::exists(dlcFolderPath)) {
+		return 0;
+	}
 
 	return GetFileCount(dlcFolderPath);
 }

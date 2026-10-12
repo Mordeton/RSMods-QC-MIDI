@@ -1,6 +1,8 @@
 #include "../stdafx.h"
 #include "GuitarSpeak.hpp"
 
+namespace Setting = Settings::Setting;
+
 /*
 Modified / Translated from the Visual Basic code provided by UKLooney
 Open source here: https://github.com/uklooney/G2RS
@@ -11,14 +13,17 @@ Open source here: https://github.com/uklooney/G2RS
 /// </summary>
 /// <returns>Current Note (MIDI Number)</returns>
 byte GuitarSpeak::GetCurrentNote() {
-	uintptr_t noteAdr = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_guitarSpeak, Offsets::ptr_guitarSpeakOffets);
+	uintptr_t noteBase = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_guitarSpeak, Offsets::ptr_guitarSpeakOffets);
 
-	if (!noteAdr) { //TODO: check the address 
+	if (!noteBase) { //TODO: check the address 
 		//LOG_ERROR("(GS) Note Address can't be found!" << std::endl);
 		return (BYTE)noNote;
 	}
 
-	return *(byte*)noteAdr;
+	// The game keeps the note for bass at a different spot than for guitar. +0x11EC is 2 when it's listening for a bass.
+	// Reading the guitar note while playing bass gave wrong notes.
+	const bool bass = *(int*)(noteBase + 0x11EC) == 2;
+	return *(byte*)(noteBase + (bass ? 0x5F4 : 0x5FC));
 }
 
 /// <summary>
@@ -47,10 +52,10 @@ bool GuitarSpeak::RunGuitarSpeak() {
 	while (true) {
 		Sleep(timer);
 
-		std::string currentMenu = GameState::GetCurrentMenu();
+		GameState::currentMenu = GameState::GetCurrentMenu();
 
 		// If someone wants to tune in the setting menu they skip the check
-		if (GameState::Menus::IsInTuningMenus() && Settings::ReturnSettingValue("GuitarSpeakWhileTuning") == "off") {
+		if (GameState::Menus::IsInTuningMenus() && Settings::IsOff(Setting::GuitarSpeakWhileTuning)) {
 			if (verbose)
 				LOG_INFO("(GS) Entered Tuning Menu! Stopping Guitar Speak." << std::endl);
 			break; // We aren't needed here anymore.
@@ -106,7 +111,7 @@ bool GuitarSpeak::RunGuitarSpeak() {
 
 		newNote = false;
 
-		if (buttonToPress.c_str() != "") {
+		if (!buttonToPress.empty()) {
 
 			// We should send a keystroke, and the key being pressed isn't null.
 			if (sendKeystrokesToRS2014) { 
@@ -121,13 +126,13 @@ bool GuitarSpeak::RunGuitarSpeak() {
 				}
 
 				// Press the key the user set for this note.
-				else if(keyToVKey.find(buttonToPress) != keyToVKey.end()) {
-					PostMessage(D3DHooks::GetGameWindow(), WM_KEYDOWN, keyToVKey.find(buttonToPress)->second, 0);
+				else if (auto it = keyToVKey.find(buttonToPress); it != keyToVKey.end()) {
+					PostMessage(D3DHooks::GetGameWindow(), WM_KEYDOWN, it->second, 0);
 					Sleep(30);
-					PostMessage(D3DHooks::GetGameWindow(), WM_KEYUP, keyToVKey.find(buttonToPress)->second, 0);
+					PostMessage(D3DHooks::GetGameWindow(), WM_KEYUP, it->second, 0);
 
 					if (verbose)
-						LOG_INFO("(GS) " << keyToVKey.find(buttonToPress)->first << " was used by Guitar Speak." << std::endl);
+						LOG_INFO("(GS) " << it->first << " was used by Guitar Speak." << std::endl);
 				}
 			}
 			// We shouldn't be reading commands here
@@ -150,19 +155,19 @@ bool GuitarSpeak::RunGuitarSpeak() {
 /// Add available keybinds
 /// </summary>
 void GuitarSpeak::FillKeyList() {
-	strKeyList[Settings::GetModSetting("GuitarSpeakDelete")]	= "DELETE";
-	strKeyList[Settings::GetModSetting("GuitarSpeakSpace")]		= "SPACE";
-	strKeyList[Settings::GetModSetting("GuitarSpeakEnter")]		= "ENTER";
-	strKeyList[Settings::GetModSetting("GuitarSpeakTab")]		= "TAB";
-	strKeyList[Settings::GetModSetting("GuitarSpeakPageUp")]	= "PGUP";
-	strKeyList[Settings::GetModSetting("GuitarSpeakPageDown")]	= "PGDN";
-	strKeyList[Settings::GetModSetting("GuitarSpeakUpArrow")]	= "UP";
-	strKeyList[Settings::GetModSetting("GuitarSpeakDownArrow")] = "DOWN";
-	strKeyList[Settings::GetModSetting("GuitarSpeakEscape")]	= "ESCAPE";
-	strKeyList[Settings::GetModSetting("GuitarSpeakClose")]		= "CLOSE";
-	strKeyList[Settings::GetModSetting("GuitarSpeakOBracket")]	= "OBRACKET";
-	strKeyList[Settings::GetModSetting("GuitarSpeakCBracket")]	= "CBRACKET";
-	strKeyList[Settings::GetModSetting("GuitarSpeakTildea")]	= "TILDEA";
-	strKeyList[Settings::GetModSetting("GuitarSpeakForSlash")]	= "FORSLASH";
-	strKeyList[Settings::GetModSetting("GuitarSpeakAlt")]		= "ALT";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakDelete)]	= "DELETE";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakSpace)]		= "SPACE";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakEnter)]		= "ENTER";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakTab)]		= "TAB";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakPageUp)]	= "PGUP";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakPageDown)]	= "PGDN";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakUpArrow)]	= "UP";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakDownArrow)] = "DOWN";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakEscape)]	= "ESCAPE";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakClose)]		= "CLOSE";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakOBracket)]	= "OBRACKET";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakCBracket)]	= "CBRACKET";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakTildea)]	= "TILDEA";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakForSlash)]	= "FORSLASH";
+	strKeyList[Settings::GetModSetting(Setting::GuitarSpeakAlt)]		= "ALT";
 }

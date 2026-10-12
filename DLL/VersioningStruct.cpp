@@ -45,7 +45,7 @@ template <typename T> VersionType VersioningStruct<T>::GetVersion()
 		return version;
 	}
 
-	const std::map<DWORD, VersionType>::const_iterator it = ourVersionChecksums.find(checksum);
+	const auto it = ourVersionChecksums.find(checksum);
 	if (it != ourVersionChecksums.cend())
 	{
 		version = (*it).second;

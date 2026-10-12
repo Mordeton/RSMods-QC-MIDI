@@ -2,6 +2,13 @@
 #include "ExtendedRangeMode.hpp"
 #include "../StringState.h"
 
+#include <array>
+#include <atomic>
+#include <thread>
+
+using Settings::StringColorMode;
+namespace Setting = Settings::Setting;
+
 /// <param name="stringnum"> - Number of string</param>
 /// <param name="state"> - Structs::string_state</param>
 /// <returns>Pointer to String Color</returns>
@@ -26,6 +33,97 @@ uintptr_t GetStringColor(uintptr_t stringnum, int state) {
 	currentStringColor = MemUtil::ReadPtr(pointerValue + currentStringColor * 0x4 + state);
 
 	return currentStringColor;
+}
+
+namespace {
+	// Every string state Use Exact Colors writes.
+	constexpr int exactColorStates[] = { Ambient, Enabled, Disabled, Glow, PegsTuning, PegsInTune, PegsNotInTune, Text, BodyNorm, BodyAcc };
+
+	// The game's own string colors, per color mode (0 = normal, 1 = colorblind) and state, saved before anything recolors them.
+	std::map<int, std::array<RSColor, 6>> gameStringColors[2];
+	bool gameStringColorsSaved = false;
+
+	/// <returns>The color mode (0 = normal, 1 = colorblind) the game is using, or -1 if it isn't available yet.</returns>
+	int GetActiveColorMode() {
+		const uintptr_t pointerValue = MemUtil::ReadPtr(Offsets::ptr_stringColor);
+
+		if (!pointerValue)
+			return -1;
+
+		const uintptr_t mode = MemUtil::ReadPtr(pointerValue + 0x348);
+		return mode < 2 ? static_cast<int>(mode) : -1;
+	}
+
+	/// <returns>Pointer to a string color in a specific color mode, or NULL.</returns>
+	uintptr_t GetStringColorInMode(int mode, uintptr_t stringnum, int state) {
+		const uintptr_t pointerValue = MemUtil::ReadPtr(Offsets::ptr_stringColor);
+
+		if (!pointerValue || mode < 0 || mode >= 2)
+			return NULL;
+
+		return MemUtil::ReadPtr(pointerValue + (mode * 0xA8 + stringnum) * 0x4 + state);
+	}
+}
+
+/// <summary>
+/// Save the game's own string colors (both color modes), once. Use Exact Colors builds every string color from these,
+/// so it has to happen before anything recolors the strings.
+/// </summary>
+void ERMode::SaveGameStringColors() {
+	if (gameStringColorsSaved)
+		return;
+
+	std::map<int, std::array<RSColor, 6>> saved[2];
+
+	for (int mode = 0; mode < 2; mode++) {
+		for (int state : exactColorStates) {
+			for (int strIndex = 0; strIndex < 6; strIndex++) {
+				const uintptr_t color = GetStringColorInMode(mode, strIndex, state);
+
+				if (!color) // Not loaded yet. Try again next time.
+					return;
+
+				saved[mode][state][strIndex] = *(RSColor*)color;
+			}
+		}
+	}
+
+	gameStringColors[0] = std::move(saved[0]);
+	gameStringColors[1] = std::move(saved[1]);
+	gameStringColorsSaved = true;
+}
+
+/// <summary>
+/// Use Exact Colors: set every string state from the user's string colors, shaded the way the game shades its own colors.
+/// Each state starts from the game's color for the string whose color is closest to the user's, and is moved to the user's color
+/// (see CollectColors::Recolor). Picking one of the game's own string colors gives exactly the game's colors.
+/// </summary>
+/// <param name="colorBlind"> - Use the colorblind (Extended Range) string colors from the INI</param>
+void ERMode::SetExactColors(bool colorBlind) {
+	const int mode = GetActiveColorMode();
+
+	if (!gameStringColorsSaved || mode < 0)
+		return;
+
+	const std::vector<RSColor> targets = Settings::GetStringColors(colorBlind);
+	if (targets.size() < 6)
+		return;
+
+	const auto& gameColors = gameStringColors[mode];
+	const ColorList gameEnabled(gameColors.at(Enabled).begin(), gameColors.at(Enabled).end());
+
+	for (int state : exactColorStates) {
+		std::vector<uintptr_t> strings;
+		InitStrings(strings, state);
+
+		for (int strIndex = 0; strIndex < 6; strIndex++) {
+			if (strings[strIndex] == NULL)
+				return;
+
+			const size_t templateString = CollectColors::NearestColor(targets[strIndex], gameEnabled, strIndex);
+			*(RSColor*)strings[strIndex] = CollectColors::Recolor(gameColors.at(state)[templateString], gameEnabled[templateString], targets[strIndex]);
+		}
+	}
 }
 
 /// <summary>
@@ -121,6 +219,9 @@ std::vector<std::vector<RSColor>> defaultColors;
 void ERMode::Toggle7StringMode() {
 	std::vector<uintptr_t> stringsTest, stringsGlow, stringsDisabled, stringsAmb, stringsEnabled, stringsPegInTune, stringsPegNotInTune, pegsTuning, stringsText, stringsPart, stringsBodyNorm, stringsBodyAcc, stringsBodyPrev;
 
+	// Always, even with Use Exact Colors off, so turning it on later still has the game's colors to work from.
+	SaveGameStringColors();
+
 	// Get the original values for the strings.
 	InitStrings(stringsGlow, Glow);
 	InitStrings(stringsDisabled, Disabled);
@@ -135,7 +236,7 @@ void ERMode::Toggle7StringMode() {
 	InitStrings(pegsTuning, PegsTuning);
 	//InitStrings(stringsBodyPrev, BodyPrev);
 
-	if (ColorsSaved && Settings::IsTwitchSettingEnabled("SolidNotes")) {
+	if (ColorsSaved && Settings::IsTwitchSettingEnabled(Setting::Twitch::SolidNotes)) {
 		if (customSolidColor.size() != 6) // JIC
 			return;
 
@@ -149,10 +250,10 @@ void ERMode::Toggle7StringMode() {
 	}
 
 	if ((ERMode::AttemptedERInThisSong && ERMode::UseERExclusivelyInThisSong) || (AttemptedERInTuner && UseERInTuner)) {
-		switch (Settings::GetModSetting("CustomStringColors")) {
-			case 0: // User wants original Rocksmith colors
+		switch (Settings::GetStringColorMode()) {
+			case StringColorMode::Default: // User wants original Rocksmith colors
 				break;
-			case 1: // User wants ZZ / Zag's colors (normal colors, but shifted down one string with a dark green on the top for Extended Range).
+			case StringColorMode::Zag: // User wants ZZ / Zag's colors (normal colors, but shifted down one string with a dark green on the top for Extended Range).
 				SetColors(stringsGlow, colorsGlow); // Zags custom low B color values manually entered; Glowed
 				SetColors(stringsDisabled, colorsDisabled); // Zags custom low B color values manually entered; Disabled
 				SetColors(stringsEnabled, colorsStrEna); // name="GuitarStringsEnabledColorBlind" id="237528906"
@@ -163,7 +264,12 @@ void ERMode::Toggle7StringMode() {
 				SetColors(stringsBodyAcc, colorsBodyAcc); // name="NotewayBodyPartsAccentBlind" id = "47948252"
 				SetColors(pegsTuning, colorsPegsTuning);
 				break;
-			case 2: // User wants their own custom (ER) colors
+			case StringColorMode::Custom: // User wants their own custom (ER) colors
+				if (Settings::IsOn(Setting::UseExactColors)) {
+					SetExactColors(true);
+					break;
+				}
+
 				SetColors(stringsEnabled, "Enabled_CB");
 				SetColors(stringsGlow, "Glow_CB");
 				SetColors(stringsDisabled, "Disabled_CB");
@@ -190,7 +296,9 @@ void ERMode::Toggle7StringMode() {
 			ColorsSaved = true;
 		}
 
-		if (Settings::GetModSetting("CustomStringColors") == 2) { // User wants their own custom (non-ER) colors
+		if (Settings::GetStringColorMode() == StringColorMode::Custom && Settings::IsOn(Setting::UseExactColors)) // Same, shaded like the game's colors
+			SetExactColors(false);
+		else if (Settings::GetStringColorMode() == StringColorMode::Custom) { // User wants their own custom (non-ER) colors
 			SetColors(stringsEnabled, "Enabled_N");
 			SetColors(stringsGlow, "Glow_N");
 			SetColors(stringsDisabled, "Disabled_N");
@@ -205,7 +313,7 @@ void ERMode::Toggle7StringMode() {
 	}
 
 	//NOTE: this overrides string colors, no matter if ER song or not
-	if (Settings::GetModSetting("CustomStringColors") == 3) { // If you want the color testing menu to work
+	if (Settings::GetStringColorMode() == StringColorMode::Test) { // If you want the color testing menu to work
 		if (saveDefaults) {
 			defaultColors.clear();
 			for (int idx = 0; idx < 17; idx++) {
@@ -252,14 +360,14 @@ void ERMode::Toggle7StringMode() {
 /// Toggle RainbowEnabled on / off.
 /// </summary>
 void ERMode::ToggleRainbowMode() {
-	RainbowEnabled = !RainbowEnabled;
+	RainbowEnabled = !RainbowEnabled.load();
 }
 
 /// <summary>
 /// Toggle RainbowNotesEnabled on / off.
 /// </summary>
 void ERMode::ToggleRainbowNotes() {
-	RainbowNotesEnabled = !RainbowNotesEnabled;
+	RainbowNotesEnabled = !RainbowNotesEnabled.load();
 }
 
 /// <summary>
@@ -276,24 +384,41 @@ bool ERMode::IsRainbowNotesEnabled() {
 	return RainbowNotesEnabled;
 }
 
-/// <summary>
-/// Toggle on Rainbow Strings / Rainbow Notes
-/// </summary>
-void ERMode::DoRainbow() {
-	if (!RainbowEnabled && !RainbowNotesEnabled)
-		return;
+namespace {
+	// The rainbow animation runs on this dedicated thread instead of the mod MainThread. 
+	std::atomic<bool> g_rainbowWorkerRunning{ false };
+	std::thread g_rainbowWorker;
 
-	std::vector<uintptr_t> stringsEnabled;
-	std::vector<uintptr_t> stringsHigh;
-	std::vector<uintptr_t> stringsDisabled;
-	std::vector<RSColor> oldEnabledColors, oldHigh, oldDisabledColors;
+	// Resolve the six colour addresses for one string state.
+	// Returns false and leaves `out` untouched if any string fails to resolve.
+	bool TryResolveStringColors(std::array<uintptr_t, 6>& out, int state) {
+		std::array<uintptr_t, 6> resolved{};
 
-	// Get original string colors.
-	for (int i = 0; i < 6; i++) {
-		stringsEnabled.push_back(GetStringColor(i, Enabled));
-		stringsHigh.push_back(GetStringColor(i, Glow));
-		stringsDisabled.push_back(GetStringColor(i, Disabled));
+		for (int i = 0; i < 6; i++) {
+			resolved[i] = GetStringColor(i, state);
+
+			if (!resolved[i]) return false;
+		}
+
+		out = resolved;
+		return true;
 	}
+}
+
+// The blocking animation loop. Reads game memory and cycles the string colours 
+// until both rainbow flags are cleared, then returns.
+static void RainbowWorker() {
+	// Clear the running flag on every exit path, so DoRainbow can relaunch the worker 
+	// next time the effect is enabled.
+	struct RunningGuard {
+		~RunningGuard() { g_rainbowWorkerRunning.store(false); }
+	} runningGuard;
+
+	// Re-resolved every frame rather than captured once up front.
+	std::array<uintptr_t, 6> stringsEnabled{}, stringsHigh{}, stringsDisabled{};
+
+	// Latched once, on the first frame that actually recolours the strings.
+	std::array<RSColor, 6> oldEnabledColors{}, oldHigh{}, oldDisabledColors{};
 
 	// Start with Red.
 	RSColor c;
@@ -305,57 +430,93 @@ void ERMode::DoRainbow() {
 	float speed = 2.f;
 	float stringOffset = 20.f;
 	bool didWeUseRainbowStrings = false; // If we don't use this, then the strings won't reset to default colors unless you end with rainbow strings.
-	while (RainbowEnabled || RainbowNotesEnabled) {
+	while (ERMode::RainbowEnabled || ERMode::RainbowNotesEnabled) {
 		// Increment Hue by the speed we are trying to mimick.
 		h += speed;
 
 		// Hue can only be a value from 0-360, so reset it to 0 if it's over 360.
 		if (h >= 360.f) { h = 0.f; }
 
+		// Only the string writes need these addresses, so a frame we can't resolve still advances
+		// the hue below - Rainbow Notes rides on customNoteColorH and keeps animating regardless.
+		const bool stringsResolved =
+			TryResolveStringColors(stringsEnabled, Enabled) &&
+			TryResolveStringColors(stringsHigh, Glow) &&
+			TryResolveStringColors(stringsDisabled, Disabled);
+
+		const bool recolourStrings = ERMode::RainbowEnabled && stringsResolved;
+
+		// Save the previous colors, once, on the first frame that actually recolours the strings.
+		if (recolourStrings && !didWeUseRainbowStrings) {
+			for (int i = 0; i < 6; i++) {
+				oldEnabledColors[i] = *(RSColor*)stringsEnabled[i];
+				oldHigh[i] = *(RSColor*)stringsHigh[i];
+				oldDisabledColors[i] = *(RSColor*)stringsDisabled[i];
+			}
+
+			didWeUseRainbowStrings = true;
+		}
+
 		// For each string
 		for (int i = 0; i < 6; i++) {
-			// Save the previous colors
-			if (RainbowEnabled) {
-				oldEnabledColors.push_back(*(RSColor*)stringsEnabled[i]);
-				oldHigh.push_back(*(RSColor*)stringsHigh[i]);
-				oldDisabledColors.push_back(*(RSColor*)stringsDisabled[i]);
-				didWeUseRainbowStrings = true;
-			}
-			
-			int newH = h + (stringOffset * i);
-			c.setH(newH);
+			int newH = static_cast<int>(h + (stringOffset * i));
+			c.setH(static_cast<float>(newH));
 
-			// Hue only goes from 0-360.
 			if (newH > 360)
 				newH -= 360;
 
 			// Since we only make textures for 180 possibilities, we can narrow out results down to 180 different values (0-179).
 			if (newH > 4)
-				customNoteColorH = (newH / 2) - 1;
+				ERMode::customNoteColorH = (newH / 2) - 1;
 			else
-				customNoteColorH = 1;
+				ERMode::customNoteColorH = 1;
 
 			// Set the new rainbow colors.
-			if (RainbowEnabled) {
+			if (recolourStrings) {
 				*(RSColor*)stringsEnabled[i] = c;
 				*(RSColor*)stringsHigh[i] = c;
 				*(RSColor*)stringsDisabled[i] = c;
 			}
+		}
 
-			// Reset back to the original colors.
-			if (!RainbowEnabled && didWeUseRainbowStrings) {
-				if (oldEnabledColors.size() == 0)
-					return;
-
-				for (int i = 0; i < 6; i++) {
-					*(RSColor*)stringsEnabled[i] = oldEnabledColors[i];
-					*(RSColor*)stringsHigh[i] = oldHigh[i];
-					*(RSColor*)stringsDisabled[i] = oldDisabledColors[i];
-				}
+		// Reset back to the original colors. If the strings can't be resolved 
+		// right now the restore just waits for a frame where they can.
+		if (!ERMode::RainbowEnabled && didWeUseRainbowStrings && stringsResolved) {
+			for (int i = 0; i < 6; i++) {
+				*(RSColor*)stringsEnabled[i] = oldEnabledColors[i];
+				*(RSColor*)stringsHigh[i] = oldHigh[i];
+				*(RSColor*)stringsDisabled[i] = oldDisabledColors[i];
 			}
 		}
+
 		Sleep(16);
 	}
+}
+
+
+// Launch the rainbow animation on its own thread if it isn't already running. Non-blocking: returns
+// immediately so MainThread command dispatch keeps flowing and the effect can be toggled off again.
+void ERMode::DoRainbow() {
+	if (!RainbowEnabled && !RainbowNotesEnabled)
+		return;
+
+	if (g_rainbowWorkerRunning.exchange(true))
+		return; // already animating
+
+	if (g_rainbowWorker.joinable())
+		g_rainbowWorker.join(); // reap the previous, already-finished worker before relaunching
+
+	g_rainbowWorker = std::thread(RainbowWorker);
+}
+
+// Stop the rainbow worker and wait for it to finish. Called on mod teardown so the thread never
+// outlives the DLL. Safe to call when no worker is running.
+void ERMode::StopRainbowThread() {
+	RainbowEnabled = false;
+	RainbowNotesEnabled = false;
+
+	if (g_rainbowWorker.joinable())
+		g_rainbowWorker.join();
 }
 
 

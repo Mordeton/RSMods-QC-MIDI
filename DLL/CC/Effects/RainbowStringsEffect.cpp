@@ -7,15 +7,15 @@ namespace CrowdControl::Effects {
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus RainbowStringsEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus RainbowStringsEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("RainbowStringsEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
@@ -23,27 +23,24 @@ namespace CrowdControl::Effects {
 	/// As it is with rainbow notes, all color changing is handled in ERMode, so it just toggles the switch in there
 	/// Does not affect the note heads!
 	/// </summary>
-	/// <returns> EffectStatus::Retry if we aren't currently in a song or the same effect is running already, or EffectStatus::Success if we are in a song</returns>
-	EffectStatus RainbowStringsEffect::Start(const Request& request)
+	/// <returns> Enums::EffectStatus::Retry if we aren't currently in a song or the same effect is running already, or Enums::EffectStatus::Success if we are in a song</returns>
+	Enums::EffectStatus RainbowStringsEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("RainbowStringsEffect::Start()" << std::endl);
-
-		if (!CanStart())
-			return EffectStatus::Retry;
 
 		ERMode::RainbowEnabled = true;
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus RainbowStringsEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus RainbowStringsEffect::OnStop()
 	{
 		LOG_INFO("RainbowStringsEffect::Stop()" << std::endl);
 
@@ -51,6 +48,6 @@ namespace CrowdControl::Effects {
 		ERMode::RainbowEnabled = false;
 		ERMode::ResetAllStrings();
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

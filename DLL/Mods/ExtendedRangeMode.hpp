@@ -1,10 +1,13 @@
 #pragma once
 
+#include <atomic>
+
 #include "../RSColor.h"
 
 namespace ERMode {
 	void Toggle7StringMode();
 	void DoRainbow();
+	void StopRainbowThread();
 	void ToggleRainbowMode();
 	void ToggleRainbowNotes();
 	bool IsRainbowEnabled();
@@ -16,10 +19,14 @@ namespace ERMode {
 	void InitStrings(std::vector<uintptr_t>& strings, int state);
 	void SetColors(std::vector<uintptr_t> strings, std::vector<RSColor> colors);
 	void SetColors(std::vector<uintptr_t> strings, const std::string& colorType);
+	void SaveGameStringColors();
+	void SetExactColors(bool colorBlind);
 
 	inline bool Is7StringSong = false;
-	inline bool RainbowEnabled = false;
-	inline bool RainbowNotesEnabled = false;
+
+	inline std::atomic<bool> RainbowEnabled = false;
+	inline std::atomic<bool> RainbowNotesEnabled = false;
+
 	inline bool ColorsSaved = false;
 	inline bool AttemptedERInTuner = false; // If true, then we are safe to look for the ER In Tuner variable.
 	inline bool UseERInTuner = false; // If true, ER Mode will toggle on in the tuner.
@@ -34,7 +41,8 @@ namespace ERMode {
 
 	inline std::vector<ColorMap> customColors;
 	inline std::vector<RSColor> customSolidColor;
-	inline int customNoteColorH;
+	// Written by the rainbow worker, read by the render thread as an index into rainbowTextures.
+	inline std::atomic<int> customNoteColorH = 0;
 
 	inline std::vector<RSColor> colorsTest = {
 		{0.382f, 0.213f, 0.435f},

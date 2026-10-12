@@ -9,17 +9,20 @@ namespace CrowdControl::Effects {
 		explicit HighwayScrollSpeedEffect(int64_t durationMilliseconds, double speedMultiplier) : multiplier(speedMultiplier)
 		{
 			duration_ms = durationMilliseconds;
-
-			incompatibleEffects = { "halfscrollspeed", "doublescrollspeed", "triplescrollspeed" };
 		}
 
-		EffectStatus Test(const Request& request);
-		EffectStatus Start(const Request& request);
-		EffectStatus Stop();
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "scroll-speed" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request);
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request);
+		Enums::EffectStatus OnStop();
 
 	private:
 		static void WriteScrollSpeedMultiplier(double val);
 	};
 }
-
-#pragma once

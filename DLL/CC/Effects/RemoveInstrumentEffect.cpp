@@ -7,48 +7,45 @@ namespace CrowdControl::Effects {
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus RemoveInstrumentEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus RemoveInstrumentEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("RemoveInstrumentEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Sets the scale of each instrument related object (headstock, inlays, fretbars, ...) to 0, hence making it temporarily invisible 
 	/// </summary>
-	/// <returns> EffectStatus::Retry if we aren't currently in a song or the same effect is running already, or EffectStatus::Success if we are in a song</returns>
-	EffectStatus RemoveInstrumentEffect::Start(const Request& request)
+	/// <returns> Enums::EffectStatus::Retry if we aren't currently in a song or the same effect is running already, or Enums::EffectStatus::Success if we are in a song</returns>
+	Enums::EffectStatus RemoveInstrumentEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("RemoveInstrumentEffect::Start()" << std::endl);
-
-		if (!CanStart())
-			return EffectStatus::Retry;
 
 		SetInstrumentScale(0);
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus RemoveInstrumentEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus RemoveInstrumentEffect::OnStop()
 	{
 		LOG_INFO("RemoveInstrumentEffect::Stop()" << std::endl);
 
 		SetInstrumentScale(1);
 		running = false;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>

@@ -1,5 +1,8 @@
 #include "../../stdafx.h"
 #include "TransparentNotesEffect.hpp"
+#include "../../Framework/Framework.hpp"
+
+namespace Setting = Settings::Setting;
 
 using namespace CrowdControl::Enums;
 
@@ -9,48 +12,49 @@ namespace CrowdControl::Effects { // Changes textures for noteheads to a nonexis
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus TransparentNotesEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus TransparentNotesEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("TransparentNotesEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Make the notes appear transparent.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus TransparentNotesEffect::Start(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus TransparentNotesEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("TransparentNotesEffect::Start()" << std::endl);
 
-		if (!CanStart())
-			return EffectStatus::Retry;
+		Framework::Registry().EnqueueSettingsUpdate([] {
+			Settings::UpdateTwitchSetting(Setting::Twitch::TransparentNotes, "on");
+		});
 
-		Settings::UpdateTwitchSetting("TransparentNotes", "on");
-		
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus TransparentNotesEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus TransparentNotesEffect::OnStop()
 	{
 		LOG_INFO("TransparentNotesEffect::Stop()" << std::endl);
 
-		Settings::UpdateTwitchSetting("TransparentNotes", "off");
+		Framework::Registry().EnqueueSettingsUpdate([] {
+			Settings::UpdateTwitchSetting(Setting::Twitch::TransparentNotes, "off");
+		});
 		running = false;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

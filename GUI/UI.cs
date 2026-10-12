@@ -130,6 +130,8 @@ namespace RSMods
             // Load RS_ASIO
             Startup_VerifyInstallOfASIO();
 
+            SettingsSanitizer.Clear();
+
             // Load RS_ASIO Settings
             PriorSettings_LoadASIOSettings();
 
@@ -139,8 +141,8 @@ namespace RSMods
             // Load All Available Rocksmith Profiles
             Startup_LoadRocksmithProfiles();
 
-            // Unpack Cache.psarc
-            Startup_UnpackCachePsarc();
+            // Backup Cache.psarc
+            Startup_BackupCachePsarc();
 
             // Load Set And Forget Mods
             SetForget_LoadSetAndForgetMods();
@@ -154,6 +156,8 @@ namespace RSMods
             // Load Checkbox Values From RSMods.ini
             PriorSettings_LoadModSettings();
             PriorSettings_LoadQCAutomationSettings();
+
+            SettingsSanitizer.ShowWarningsIfAny();
 
             // Delete Old Backups To Save Space (if user specifies)
             Startup_DeleteOldBackups(GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.NumberOfBackupsIdentifier), 50));
@@ -245,7 +249,7 @@ namespace RSMods
 
                 if (newSavePath == string.Empty)
                 {
-                    MessageBox.Show("We cannot detect where you have Rocksmith2014 saves are located.", "Error: SavePath Not Found", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("We cannot detect where your Rocksmith2014 saves are located.", "Error: SavePath Not Found", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     Environment.Exit(1);
                 }
 
@@ -265,7 +269,7 @@ namespace RSMods
 
                         if (newSavePath == string.Empty)
                         {
-                            MessageBox.Show("We cannot detect where you have Rocksmith2014 saves are located.", "Error: SavePath Not Found", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            MessageBox.Show("We cannot detect where your Rocksmith2014 saves are located.", "Error: SavePath Not Found", MessageBoxButtons.OK, MessageBoxIcon.Error);
                             Environment.Exit(1);
                         }
                     }
@@ -414,38 +418,7 @@ namespace RSMods
             }
         }
 
-        private void Startup_DeleteOldBackups(int maxAmountOfBackups)
-        {
-
-            if (maxAmountOfBackups == 0) // User says they want all the backups.
-                return;
-
-            string backupFolder = Path.Combine(RSMods.Data.Constants.RSFolder, "Profile_Backups");
-
-            if (!Directory.Exists(backupFolder))
-                return;
-
-            DirectoryInfo[] backups = new DirectoryInfo(backupFolder).GetDirectories().OrderBy(f => f.LastWriteTime).ToArray();
-
-            int foldersLeftToRemove = backups.Length - maxAmountOfBackups;
-
-            foreach (DirectoryInfo backup in backups)
-            {
-                if (foldersLeftToRemove == 0)
-                    break;
-
-                if (Array.IndexOf(backups, backup.Name) < backups.Length - maxAmountOfBackups)
-                {
-                    foreach (string file in Directory.GetFiles(backup.FullName))
-                    {
-                        File.Delete(file);
-                    }
-                    Directory.Delete(backup.FullName);
-                    foldersLeftToRemove--;
-                }
-
-            }
-        }
+        private void Startup_DeleteOldBackups(int maxAmountOfBackups) => Profiles.DeleteOldBackups(maxAmountOfBackups);
 
         private void Startup_BackupProfiles()
         {
@@ -470,41 +443,40 @@ namespace RSMods
 
         private void Startup_ListAllBackups()
         {
-            try
-            {
-                List<string> backups = new List<string>();
-                foreach (string backup in Directory.GetDirectories(Path.Combine(GenUtil.GetRSDirectory(), "Profile_Backups")))
-                {
-                    string folderName = Path.GetFileNameWithoutExtension(backup);
-                    string date = folderName.Split('_')[0];
-                    string time = folderName.Split('_')[1];
-
-                    int month = Convert.ToInt32(date.Split('-')[0]);
-                    int day = Convert.ToInt32(date.Split('-')[1]);
-                    int year = Convert.ToInt32(date.Split('-')[2]);
-
-                    string userFriendlyName = CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedMonthName(month) + " " + day + " " + year + " @ " + time.Replace('-', ':');
-
-                    backups.Add(userFriendlyName);
-                }
-                backups.Reverse();
-                backups.ForEach(b => listBox_Profiles_ListBackups.Items.Add(b));
-            }
-            catch // Folder doesn't exist
-            {
-            }
+            foreach (Profiles.ProfileBackup backup in Profiles.ListBackups())
+                listBox_Profiles_ListBackups.Items.Add(backup); // Shown with ProfileBackup.ToString()
         }
 
         private void Startup_ShowUpdateButton() => button_UpdateRSMods.Visible = CheckForUpdates_IsUpdateAvailable();
 
         private void Startup_CheckStatusAudioPsarc() => SoundPacks_ChangeUIForUnpackedFolder(Directory.Exists("audio_psarc"));
 
-        private void Startup_UnpackCachePsarc() => SetAndForgetMods.UnpackCachePsarc();
+        private void Startup_BackupCachePsarc()
+        {
+            SetAndForgetMods.BackupCachePsarc();
+            SetAndForgetMods.RemoveTempFolders(); // Older versions kept an unpacked cache around between sessions.
+        }
 
         #endregion
         #region Show Prior Settings In GUI
         private void PriorSettings_LoadModSettings()
         {
+            const string src = "RSMods.ini";
+
+            RsModsLimits.ApplyToUiControls(
+                nUpDown_VolumeInterval,
+                nUpDown_RiffRepeaterSpeed,
+                nUpDown_NumberOfBackups,
+                nUpDown_OverrideInputVolume,
+                nUpDown_ForceEnumerationXMS,
+                nUpDown_LoopingLeadUp,
+                nUpDown_RewindBy,
+                nUpDown_RewindLeadup,
+                nUpDown_NSPTimer,
+                trackBar_FontSize,
+                listBox_ExtendedRangeTunings,
+                listBox_MidiAutoTuningOffset);
+
             if (ReadSettings.ProcessSettings(ReadSettings.ToggleLoftEnabledIdentifier) == "on") // Toggle Loft Enabled / Disabled
             {
                 checkBox_ToggleLoft.Checked = true;
@@ -513,12 +485,19 @@ namespace RSMods
                 radio_LoftOffInSong.Visible = true;
                 groupBox_LoftOffWhen.Visible = true;
 
-                if (ReadSettings.ProcessSettings(ReadSettings.ToggleLoftWhenIdentifier) == "startup")
+                string loftWhen = ReadSettings.ProcessSettings(ReadSettings.ToggleLoftWhenIdentifier);
+                if (loftWhen == "startup")
                     radio_LoftAlwaysOff.Checked = true;
-                else if (ReadSettings.ProcessSettings(ReadSettings.ToggleLoftWhenIdentifier) == "manual")
+                else if (loftWhen == "manual")
                     radio_LoftOffHotkey.Checked = true;
-                else if (ReadSettings.ProcessSettings(ReadSettings.ToggleLoftWhenIdentifier) == "song")
+                else if (loftWhen == "song")
                     radio_LoftOffInSong.Checked = true;
+                else if (!string.IsNullOrWhiteSpace(loftWhen))
+                {
+                    SettingsSanitizer.ReportInvalid(src, ReadSettings.ToggleLoftWhenIdentifier, loftWhen, "manual",
+                        "must be one of: startup, manual, song");
+                    radio_LoftOffHotkey.Checked = true;
+                }
             }
 
             if (ReadSettings.ProcessSettings(ReadSettings.VolumeControlEnabledIdentifier) == "on") // Add Volume Enabled / Disabled
@@ -527,11 +506,12 @@ namespace RSMods
                 groupBox_Keybindings_AUDIO.Visible = true;
                 groupBox_ControlVolumeIncrement.Visible = true;
 
-                string valStr = ReadSettings.ProcessSettings(ReadSettings.VolumeControlIntervalIdentifier);
-                int intVal = 0;
-
-                if (int.TryParse(valStr, out intVal))
-                    nUpDown_VolumeInterval.Value = intVal;
+                SettingsSanitizer.SafeSetNumericUpDown(
+                    nUpDown_VolumeInterval,
+                    ReadSettings.ProcessSettings(ReadSettings.VolumeControlIntervalIdentifier),
+                    RsModsLimits.VolumeIntervalDefault,
+                    RsModsLimits.VolumeIntervalMin, RsModsLimits.VolumeIntervalMax,
+                    src, ReadSettings.VolumeControlIntervalIdentifier);
             }
 
             if (ReadSettings.ProcessSettings(ReadSettings.ShowSongTimerEnabledIdentifier) == "on") // Show Song Timer Enabled / Disabled
@@ -578,10 +558,17 @@ namespace RSMods
                 checkBox_RemoveHeadstock.Checked = true;
                 groupBox_ToggleHeadstockOffWhen.Visible = true;
 
-                if (ReadSettings.ProcessSettings(ReadSettings.RemoveHeadstockWhenIdentifier) == "startup")
+                string headWhen = ReadSettings.ProcessSettings(ReadSettings.RemoveHeadstockWhenIdentifier);
+                if (headWhen == "startup")
                     radio_HeadstockAlwaysOff.Checked = true;
-                else if (ReadSettings.ProcessSettings(ReadSettings.RemoveHeadstockWhenIdentifier) == "song")
+                else if (headWhen == "song")
                     radio_HeadstockOffInSong.Checked = true;
+                else if (!string.IsNullOrWhiteSpace(headWhen))
+                {
+                    SettingsSanitizer.ReportInvalid(src, ReadSettings.RemoveHeadstockWhenIdentifier, headWhen, "song",
+                        "must be one of: startup, song");
+                    radio_HeadstockOffInSong.Checked = true;
+                }
             }
 
             if (ReadSettings.ProcessSettings(ReadSettings.RemoveSkylineIdentifier) == "on") // Remove Skyline Enabled / Disabled
@@ -589,10 +576,17 @@ namespace RSMods
                 checkBox_RemoveSkyline.Checked = true;
                 groupBox_ToggleSkylineWhen.Visible = true;
 
-                if (ReadSettings.ProcessSettings(ReadSettings.ToggleSkylineWhenIdentifier) == "song") // Remove Skyline on Song Load
+                string skyWhen = ReadSettings.ProcessSettings(ReadSettings.ToggleSkylineWhenIdentifier);
+                if (skyWhen == "song")
                     radio_SkylineOffInSong.Checked = true;
-                else if (ReadSettings.ProcessSettings(ReadSettings.ToggleSkylineWhenIdentifier) == "startup") // Remove Skyline on Game Startup 
+                else if (skyWhen == "startup")
                     radio_SkylineAlwaysOff.Checked = true;
+                else if (!string.IsNullOrWhiteSpace(skyWhen))
+                {
+                    SettingsSanitizer.ReportInvalid(src, ReadSettings.ToggleSkylineWhenIdentifier, skyWhen, "song",
+                        "must be one of: startup, song");
+                    radio_SkylineOffInSong.Checked = true;
+                }
             }
 
             if (ReadSettings.ProcessSettings(ReadSettings.ForceProfileEnabledIdentifier) == "on") // Force Load Profile On Game Boot Enabled / Disabled
@@ -607,10 +601,17 @@ namespace RSMods
                 checkBox_RemoveLyrics.Checked = true;
                 groupBox_ToggleLyricsOffWhen.Visible = true;
 
-                if (ReadSettings.ProcessSettings(ReadSettings.RemoveLyricsWhenIdentifier) == "startup") // Remove Lyrics When ...
+                string lyricsWhen = ReadSettings.ProcessSettings(ReadSettings.RemoveLyricsWhenIdentifier);
+                if (lyricsWhen == "startup")
                     radio_LyricsAlwaysOff.Checked = true;
-                else if (ReadSettings.ProcessSettings(ReadSettings.RemoveLyricsWhenIdentifier) == "manual") // Remove Lyrics When ...
+                else if (lyricsWhen == "manual")
                     radio_LyricsOffHotkey.Checked = true;
+                else if (!string.IsNullOrWhiteSpace(lyricsWhen))
+                {
+                    SettingsSanitizer.ReportInvalid(src, ReadSettings.RemoveLyricsWhenIdentifier, lyricsWhen, "manual",
+                        "must be one of: startup, manual");
+                    radio_LyricsOffHotkey.Checked = true;
+                }
             }
 
             if (ReadSettings.ProcessSettings(ReadSettings.GuitarSpeakIdentifier) == "on")
@@ -626,13 +627,12 @@ namespace RSMods
                 groupBox_RRSpeed.Visible = true;
 
                 string val = ReadSettings.ProcessSettings(ReadSettings.RiffRepeaterSpeedIntervalIdentifier);
-                decimal decimalVal = 0;
-
-                if (Decimal.TryParse(val, out decimalVal))
-                {
-                    nUpDown_RiffRepeaterSpeed.Value = decimalVal;
+                decimal decimalVal = SettingsSanitizer.SafeSetNumericUpDown(
+                    nUpDown_RiffRepeaterSpeed, val, RsModsLimits.RiffRepeaterSpeedDefault,
+                    RsModsLimits.RiffRepeaterSpeedMin, RsModsLimits.RiffRepeaterSpeedMax,
+                    src, ReadSettings.RiffRepeaterSpeedIntervalIdentifier);
+                if (!string.IsNullOrWhiteSpace(val))
                     SaveSettings_Save(ReadSettings.RiffRepeaterSpeedIntervalIdentifier, decimalVal.ToString());
-                }
 
             }
 
@@ -642,14 +642,25 @@ namespace RSMods
                 groupBox_MidiAutoTuneDevice.Visible = true;
                 label_SelectedMidiOutDevice.Text = "Midi Device: " + ReadSettings.ProcessSettings(ReadSettings.MidiAutoTuningDeviceIdentifier);
                 groupBox_MidiAutoTuningOffset.Visible = true;
-                listBox_MidiAutoTuningOffset.SelectedIndex = GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.MidiTuningOffsetIdentifier), 0) + 3;
+                string rawMidiOffset = ReadSettings.ProcessSettings(ReadSettings.MidiTuningOffsetIdentifier);
+                int midiOffset = SettingsSanitizer.SanitizeInt(rawMidiOffset, RsModsLimits.MidiTuningOffsetDefault,
+                    RsModsLimits.MidiTuningOffsetMin, RsModsLimits.MidiTuningOffsetMax,
+                    src, ReadSettings.MidiTuningOffsetIdentifier);
+                SettingsSanitizer.SafeSetSelectedIndex(
+                    listBox_MidiAutoTuningOffset,
+                    RsModsLimits.MidiOffsetToListIndex(midiOffset),
+                    RsModsLimits.MidiOffsetToListIndex(RsModsLimits.MidiTuningOffsetDefault),
+                    src, ReadSettings.MidiTuningOffsetIdentifier, rawMidiOffset);
                 groupBox_MidiAutoTuningWhen.Visible = true;
                 //groupBox_MidiInDevice.Visible = true;
                 label_SelectedMidiInDevice.Text = "Midi Device: " + ReadSettings.ProcessSettings(ReadSettings.MidiInDeviceIdentifier);
 
-                if (ReadSettings.ProcessSettings(ReadSettings.TuningPedalIdentifier) != "")
+                string rawPedal = ReadSettings.ProcessSettings(ReadSettings.TuningPedalIdentifier);
+                if (!string.IsNullOrWhiteSpace(rawPedal))
                 {
-                    int tuningPedal = GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.TuningPedalIdentifier), 0);
+                    int tuningPedal = SettingsSanitizer.SanitizeInt(rawPedal, 0,
+                        RsModsLimits.TuningPedalMin, RsModsLimits.TuningPedalMax,
+                        src, ReadSettings.TuningPedalIdentifier);
 
                     switch (tuningPedal)
                     {
@@ -673,21 +684,32 @@ namespace RSMods
 
                 }
 
-                switch (ReadSettings.ProcessSettings(ReadSettings.MidiAutoTuningWhenIdentifier))
+                string midiWhen = ReadSettings.ProcessSettings(ReadSettings.MidiAutoTuningWhenIdentifier);
+                switch (midiWhen)
                 {
-                    default: // Intentional fall-through
+                    case "tuner":
+                        radio_AutoTuningWhenTuner.Checked = true;
+                        break;
                     case "manual":
                         radio_AutoTuningWhenManual.Checked = true;
                         break;
-                    case "tuner":
-                        radio_AutoTuningWhenTuner.Checked = true;
+                    default:
+                        if (!string.IsNullOrWhiteSpace(midiWhen))
+                            SettingsSanitizer.ReportInvalid(src, ReadSettings.MidiAutoTuningWhenIdentifier, midiWhen, "manual",
+                                "must be one of: manual, tuner");
+                        radio_AutoTuningWhenManual.Checked = true;
                         break;
                 }
             }
 
             if (ReadSettings.ProcessSettings(ReadSettings.BackupProfileIdentifier) == "on")
             {
-                nUpDown_NumberOfBackups.Value = GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.NumberOfBackupsIdentifier), 50);
+                SettingsSanitizer.SafeSetNumericUpDown(
+                    nUpDown_NumberOfBackups,
+                    ReadSettings.ProcessSettings(ReadSettings.NumberOfBackupsIdentifier),
+                    RsModsLimits.NumberOfBackupsDefault,
+                    RsModsLimits.NumberOfBackupsMin, RsModsLimits.NumberOfBackupsMax,
+                    src, ReadSettings.NumberOfBackupsIdentifier);
                 groupBox_Backups.Visible = true;
             }
 
@@ -699,9 +721,32 @@ namespace RSMods
 
             checkBox_EnableLooping.Checked = ReadSettings.ProcessSettings(ReadSettings.AllowLoopingIdentifier) == "on";
             groupBox_LoopingLeadUp.Visible = checkBox_EnableLooping.Checked;
-            nUpDown_LoopingLeadUp.Value = GenUtil.EstablishMaxValue((GenUtil.StrToDecDef(ReadSettings.ProcessSettings(ReadSettings.LoopingLeadUpIdentifier), 0) / 1000), 5.000m);
-            listBox_ExtendedRangeTunings.SelectedIndex = (GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.ExtendedRangeTuningIdentifier), 0) * -1) - 2; // Loads old ER tuning settings
-            trackBar_FontSize.Value = GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.OnScreenFontSizeIdentifier), trackBar_FontSize.Minimum);
+            {
+                string rawLeadUp = ReadSettings.ProcessSettings(ReadSettings.LoopingLeadUpIdentifier);
+                decimal leadUpMs = SettingsSanitizer.SanitizeDecimal(rawLeadUp, RsModsLimits.LoopingLeadUpMsDefault,
+                    (int)(RsModsLimits.LoopingLeadUpSecondsMin * 1000), (int)(RsModsLimits.LoopingLeadUpSecondsMax * 1000),
+                    src, ReadSettings.LoopingLeadUpIdentifier);
+                SettingsSanitizer.SafeSetNumericUpDown(nUpDown_LoopingLeadUp,
+                    (leadUpMs / 1000).ToString(CultureInfo.InvariantCulture),
+                    RsModsLimits.LoopingLeadUpSecondsDefault,
+                    RsModsLimits.LoopingLeadUpSecondsMin, RsModsLimits.LoopingLeadUpSecondsMax,
+                    src, ReadSettings.LoopingLeadUpIdentifier);
+            }
+            {
+                string rawErTuning = ReadSettings.ProcessSettings(ReadSettings.ExtendedRangeTuningIdentifier);
+                int erTuning = SettingsSanitizer.SanitizeInt(rawErTuning, RsModsLimits.ExtendedRangeTuningDefault,
+                    RsModsLimits.ExtendedRangeTuningMin, RsModsLimits.ExtendedRangeTuningMax,
+                    src, ReadSettings.ExtendedRangeTuningIdentifier);
+                int erIndex = RsModsLimits.ExtendedRangeTuningToListIndex(erTuning);
+                int defaultIndex = RsModsLimits.ExtendedRangeTuningToListIndex(RsModsLimits.ExtendedRangeTuningDefault);
+                SettingsSanitizer.SafeSetSelectedIndex(
+                    listBox_ExtendedRangeTunings, erIndex, defaultIndex,
+                    src, ReadSettings.ExtendedRangeTuningIdentifier, rawErTuning);
+            }
+            SettingsSanitizer.SafeSetTrackBar(
+                trackBar_FontSize,
+                ReadSettings.ProcessSettings(ReadSettings.OnScreenFontSizeIdentifier),
+                RsModsLimits.FontSizeDefault, src, ReadSettings.OnScreenFontSizeIdentifier);
             checkBox_GuitarSpeakWhileTuning.Checked = ReadSettings.ProcessSettings(ReadSettings.GuitarSpeakTuningIdentifier) == "on";
             checkBox_ChangeTheme.Checked = ReadSettings.ProcessSettings(ReadSettings.CustomGUIThemeIdentifier) == "on";
             checkBox_ScreenShotScores.Checked = ReadSettings.ProcessSettings(ReadSettings.ScreenShotScoresIdentifier) == "on";
@@ -724,10 +769,27 @@ namespace RSMods
             checkBox_UseAltSampleRate_Output.Checked = ReadSettings.ProcessSettings(ReadSettings.UseAlternativeOutputSampleRateIdentifier) == "on";
             groupBox_SampleRateOutput.Visible = checkBox_UseAltSampleRate_Output.Checked;
             listBox_AltSampleRatesOutput.SelectedItem = ReadSettings.ProcessSettings(ReadSettings.AlternativeOutputSampleRateIdentifier) + " Hz";
-            nUpDown_ForceEnumerationXMS.Value = GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.CheckForNewSongIntervalIdentifier), 5000) / 1000; // Loads old settings for enumeration every x ms
+            {
+                string rawEnumMs = ReadSettings.ProcessSettings(ReadSettings.CheckForNewSongIntervalIdentifier);
+                decimal enumMs = SettingsSanitizer.SanitizeDecimal(rawEnumMs, RsModsLimits.EnumerateIntervalMsDefault,
+                    (int)(RsModsLimits.EnumerateIntervalSecondsMin * 1000),
+                    (int)(RsModsLimits.EnumerateIntervalSecondsMax * 1000),
+                    src, ReadSettings.CheckForNewSongIntervalIdentifier);
+                SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ForceEnumerationXMS,
+                    (enumMs / 1000).ToString(CultureInfo.InvariantCulture),
+                    RsModsLimits.EnumerateIntervalSecondsDefault,
+                    RsModsLimits.EnumerateIntervalSecondsMin, RsModsLimits.EnumerateIntervalSecondsMax,
+                    src, ReadSettings.CheckForNewSongIntervalIdentifier);
+            }
             listBox_AvailableInputDevices.SelectedItem = ReadSettings.ProcessSettings(ReadSettings.OverrideInputVolumeDeviceIdentifier);
-            nUpDown_OverrideInputVolume.Value = GenUtil.StrToIntDef(ReadSettings.ProcessSettings(ReadSettings.OverrideInputVolumeIdentifier), 17);
+            SettingsSanitizer.SafeSetNumericUpDown(
+                nUpDown_OverrideInputVolume,
+                ReadSettings.ProcessSettings(ReadSettings.OverrideInputVolumeIdentifier),
+                RsModsLimits.OverrideInputVolumeDefault,
+                RsModsLimits.OverrideInputVolumeMin, RsModsLimits.OverrideInputVolumeMax,
+                src, ReadSettings.OverrideInputVolumeIdentifier);
             checkBox_ER_SeparateNoteColors.Checked = ReadSettings.ProcessSettings(ReadSettings.SeparateNoteColorsIdentifier) == "on";
+            checkBox_UseExactColors.Checked = ReadSettings.ProcessSettings(ReadSettings.UseExactColorsIdentifier) == "on";
             groupBox_NoteColors.Visible = checkBox_ER_SeparateNoteColors.Checked;
             checkBox_BackupProfile.Checked = ReadSettings.ProcessSettings(ReadSettings.BackupProfileIdentifier) == "on";
             checkBox_ModsLog.Checked = File.Exists(Path.Combine(GenUtil.GetRSDirectory(), "RSMods_debug.txt"));
@@ -736,16 +798,48 @@ namespace RSMods
             checkBox_AllowRewind.Checked = ReadSettings.ProcessSettings(ReadSettings.AllowRewindIdentifier) == "on";
             groupBox_RewindBy.Visible = checkBox_AllowRewind.Checked;
             groupBox_RewindLeadup.Visible = checkBox_AllowRewind.Checked;
-            nUpDown_RewindBy.Value = GenUtil.EstablishMaxValue((GenUtil.StrToDecDef(ReadSettings.ProcessSettings(ReadSettings.RewindByIdentifier), 0) / 1000), 90.000m);
-            nUpDown_RewindLeadup.Value = GenUtil.EstablishMaxValue((GenUtil.StrToDecDef(ReadSettings.ProcessSettings(ReadSettings.RewindLeadupIdentifier), 0) / 1000), 90.000m);
+            {
+                string rawRewind = ReadSettings.ProcessSettings(ReadSettings.RewindByIdentifier);
+                decimal rewindMs = SettingsSanitizer.SanitizeDecimal(rawRewind, RsModsLimits.RewindByMsDefault,
+                    (int)(RsModsLimits.RewindBySecondsMin * 1000), (int)(RsModsLimits.RewindBySecondsMax * 1000),
+                    src, ReadSettings.RewindByIdentifier);
+                SettingsSanitizer.SafeSetNumericUpDown(nUpDown_RewindBy,
+                    (rewindMs / 1000).ToString(CultureInfo.InvariantCulture),
+                    RsModsLimits.RewindBySecondsDefault,
+                    RsModsLimits.RewindBySecondsMin, RsModsLimits.RewindBySecondsMax,
+                    src, ReadSettings.RewindByIdentifier);
+
+                string rawRewindLead = ReadSettings.ProcessSettings(ReadSettings.RewindLeadupIdentifier);
+                decimal rewindLeadMs = SettingsSanitizer.SanitizeDecimal(rawRewindLead, RsModsLimits.RewindLeadupMsDefault,
+                    (int)(RsModsLimits.RewindLeadupSecondsMin * 1000), (int)(RsModsLimits.RewindLeadupSecondsMax * 1000),
+                    src, ReadSettings.RewindLeadupIdentifier);
+                SettingsSanitizer.SafeSetNumericUpDown(nUpDown_RewindLeadup,
+                    (rewindLeadMs / 1000).ToString(CultureInfo.InvariantCulture),
+                    RsModsLimits.RewindLeadupSecondsDefault,
+                    RsModsLimits.RewindLeadupSecondsMin, RsModsLimits.RewindLeadupSecondsMax,
+                    src, ReadSettings.RewindLeadupIdentifier);
+            }
             checkBox_FixOculusCrash.Checked = ReadSettings.ProcessSettings(ReadSettings.FixOculusCrashIdentifier) == "on";
             checkBox_FixBrokenTones.Checked = ReadSettings.ProcessSettings(ReadSettings.FixBrokenTonesIdentifier) == "on";
             checkBox_CustomNSPTimer.Checked = ReadSettings.ProcessSettings(ReadSettings.UseCustomNSPTimerIdentifier) == "on";
             checkBox_DisplayCurrentAccuracy.Checked = ReadSettings.ProcessSettings(ReadSettings.DisplayCurrentAccuracyIdentifier) == "on";
             checkBox_PreventMidSongPause.Checked = ReadSettings.ProcessSettings(ReadSettings.PreventMidSongPauseIdentifier) == "on";
+            checkBox_Ultrawide.Checked = ReadSettings.ProcessSettings(ReadSettings.UltrawideIdentifier) == "on";
             checkBox_RemoveFingerprints.Checked = ReadSettings.ProcessSettings(ReadSettings.RemoveFingerprintsIdentifier) == "on";
+            checkBox_FastProfileLoadAndSave.Checked = ReadSettings.ProcessSettings(ReadSettings.FastProfileLoadAndSaveIdentifier) == "on";
+            ProfileBackups_RequireForFastLoadAndSave();
             groupBox_NSPTimer.Visible = checkBox_CustomNSPTimer.Checked;
-            nUpDown_NSPTimer.Value = GenUtil.EstablishMaxValue((GenUtil.StrToDecDef(ReadSettings.ProcessSettings(ReadSettings.CustomNSPTimeLimitIdentifier), 10000) / 1000), 60.000m);
+            {
+                string rawNsp = ReadSettings.ProcessSettings(ReadSettings.CustomNSPTimeLimitIdentifier);
+                decimal nspMs = SettingsSanitizer.SanitizeDecimal(rawNsp, RsModsLimits.NspTimerMsDefault,
+                    (int)(RsModsLimits.NspTimerSecondsMin * 1000), (int)(RsModsLimits.NspTimerSecondsMax * 1000),
+                    src, ReadSettings.CustomNSPTimeLimitIdentifier);
+                SettingsSanitizer.SafeSetNumericUpDown(nUpDown_NSPTimer,
+                    (nspMs / 1000).ToString(CultureInfo.InvariantCulture),
+                    RsModsLimits.NspTimerSecondsDefault,
+                    RsModsLimits.NspTimerSecondsMin, RsModsLimits.NspTimerSecondsMax,
+                    src, ReadSettings.CustomNSPTimeLimitIdentifier);
+            }
         }
 
         private static string QCAutomation_GetFirstNonEmptySetting(params string[] identifiers)
@@ -1126,87 +1220,238 @@ namespace RSMods
 
         private void PriorSettings_LoadASIOSettings()
         {
+            ASIO.RsAsioLimits.ApplyToUiControls(
+                nUpDown_ASIO_CustomBufferSize,
+                nUpDown_ASIO_Output_BaseChannel,
+                nUpDown_ASIO_Output_AltBaseChannel,
+                nUpDown_ASIO_Output_MaxVolume,
+                nUpDown_ASIO_Input0_Channel,
+                nUpDown_ASIO_Input0_MaxVolume,
+                nUpDown_ASIO_Input1_Channel,
+                nUpDown_ASIO_Input1_MaxVolume,
+                nUpDown_ASIO_InputMic_Channel,
+                nUpDown_ASIO_InputMic_MaxVolume,
+                checkBox_ASIO_WASAPI_Output);
+
+            checkBox_ASIO_WASAPI_Input.Checked = ASIO.RsAsioLimits.EnableWasapiInputsDefault;
+            checkBox_ASIO_ASIO.Checked = ASIO.RsAsioLimits.EnableAsioDefault;
+            checkBox_ASIO_Output_ControlEndpointVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_Output_ControlMasterVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_Input0_ControlEndpointVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_Input0_ControlMasterVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_Input1_ControlEndpointVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_Input1_ControlMasterVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_InputMic_ControlEndpointVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            checkBox_ASIO_InputMic_ControlMasterVolume.Checked = ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault;
+            radio_ASIO_BufferSize_Driver.Checked = true;
+
             if (!ASIO.ReadSettings.VerifySettingsExist())
                 return;
 
-            // Config
-            checkBox_ASIO_WASAPI_Output.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableWasapiOutputsIdentifier, ASIO.ReadSettings.Sections.Config), 0));
-            checkBox_ASIO_WASAPI_Input.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableWasapiInputsIdentifier, ASIO.ReadSettings.Sections.Config), 0));
-            checkBox_ASIO_ASIO.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableAsioIdentifier, ASIO.ReadSettings.Sections.Config), 0));
+            const string src = "RS_ASIO.ini";
 
-            // Asio
-            if (ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio) == "custom")
+            string rawWasapiOut = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableWasapiOutputsIdentifier, ASIO.ReadSettings.Sections.Config);
+            checkBox_ASIO_WASAPI_Output.CheckState = SettingsSanitizer.SanitizeWasapiOutputsTriState(
+                rawWasapiOut, src, ASIO.ReadSettings.EnableWasapiOutputsIdentifier);
+
+            checkBox_ASIO_WASAPI_Input.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableWasapiInputsIdentifier, ASIO.ReadSettings.Sections.Config),
+                ASIO.RsAsioLimits.EnableWasapiInputsDefault, src, ASIO.ReadSettings.EnableWasapiInputsIdentifier);
+            checkBox_ASIO_ASIO.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableAsioIdentifier, ASIO.ReadSettings.Sections.Config),
+                ASIO.RsAsioLimits.EnableAsioDefault, src, ASIO.ReadSettings.EnableAsioIdentifier);
+
+            string bufferMode = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio);
+            string bufferModeLower = (bufferMode ?? string.Empty).Trim().ToLowerInvariant();
+            if (bufferModeLower == ASIO.RsAsioLimits.BufferModeCustom)
             {
                 radio_ASIO_BufferSize_Custom.Checked = true;
-                nUpDown_ASIO_CustomBufferSize.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.CustomBufferSizeIdentifier, ASIO.ReadSettings.Sections.Asio), 48);
+                string rawBuf = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.CustomBufferSizeIdentifier, ASIO.ReadSettings.Sections.Asio);
+                if (string.IsNullOrWhiteSpace(rawBuf))
+                {
+                    SettingsSanitizer.ReportInvalid(src, ASIO.ReadSettings.CustomBufferSizeIdentifier, "(empty)",
+                        ASIO.RsAsioLimits.CustomBufferSizeDefault.ToString(),
+                        "BufferSizeMode=custom requires CustomBufferSize >= 1");
+                    SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_CustomBufferSize,
+                        ASIO.RsAsioLimits.CustomBufferSizeDefault.ToString(),
+                        ASIO.RsAsioLimits.CustomBufferSizeDefault,
+                        ASIO.RsAsioLimits.CustomBufferSizeMin, ASIO.RsAsioLimits.CustomBufferSizeMax,
+                        src, ASIO.ReadSettings.CustomBufferSizeIdentifier);
+                }
+                else
+                {
+                    SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_CustomBufferSize, rawBuf,
+                        ASIO.RsAsioLimits.CustomBufferSizeDefault,
+                        ASIO.RsAsioLimits.CustomBufferSizeMin, ASIO.RsAsioLimits.CustomBufferSizeMax,
+                        src, ASIO.ReadSettings.CustomBufferSizeIdentifier);
+                }
             }
-            if (ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio) == "driver")
+            else if (bufferModeLower == ASIO.RsAsioLimits.BufferModeDriver)
                 radio_ASIO_BufferSize_Driver.Checked = true;
-            if (ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio) == "host")
+            else if (bufferModeLower == ASIO.RsAsioLimits.BufferModeHost)
                 radio_ASIO_BufferSize_Host.Checked = true;
+            else if (!string.IsNullOrWhiteSpace(bufferMode))
+            {
+                SettingsSanitizer.ReportInvalid(src, ASIO.ReadSettings.BufferSizeModeIdentifier, bufferMode,
+                    ASIO.RsAsioLimits.BufferModeDriver,
+                    "must be one of: driver, host, custom");
+                radio_ASIO_BufferSize_Driver.Checked = true;
+            }
 
-            // Output
-            nUpDown_ASIO_Output_BaseChannel.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.BaseChannelIdentifier, ASIO.ReadSettings.Sections.Output), 0);
-            nUpDown_ASIO_Output_AltBaseChannel.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.AltBaseChannelIdentifier, ASIO.ReadSettings.Sections.Output), 0);
-            checkBox_ASIO_Output_ControlEndpointVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.Output), 0));
-            checkBox_ASIO_Output_ControlMasterVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.Output), 0));
-            nUpDown_ASIO_Output_MaxVolume.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.Output), 0);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Output_BaseChannel,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.BaseChannelIdentifier, ASIO.ReadSettings.Sections.Output),
+                ASIO.RsAsioLimits.OutputBaseChannelDefault,
+                ASIO.RsAsioLimits.ChannelMin, ASIO.RsAsioLimits.ChannelMax,
+                src, "[Asio.Output] BaseChannel");
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Output_AltBaseChannel,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.AltBaseChannelIdentifier, ASIO.ReadSettings.Sections.Output),
+                ASIO.RsAsioLimits.OutputAltBaseChannelDefault,
+                ASIO.RsAsioLimits.ChannelMin, ASIO.RsAsioLimits.ChannelMax,
+                src, "[Asio.Output] AltBaseChannel");
+            checkBox_ASIO_Output_ControlEndpointVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.Output),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Output] EnableSoftwareEndpointVolumeControl");
+            checkBox_ASIO_Output_ControlMasterVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.Output),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Output] EnableSoftwareMasterVolumeControl");
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Output_MaxVolume,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.Output),
+                ASIO.RsAsioLimits.VolumePercentDefault,
+                ASIO.RsAsioLimits.VolumePercentMin, ASIO.RsAsioLimits.VolumePercentMax,
+                src, "[Asio.Output] SoftwareMasterVolumePercent");
             checkBox_ASIO_Output_Disabled.Checked = ASIO.ReadSettings.DisabledOutput;
             listBox_AvailableASIODevices_Output.SelectedItem = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.DriverIdentifier, ASIO.ReadSettings.Sections.Output);
-            checkBox_ASIO_Output_EnableRefHack.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.Output), 0));
+            checkBox_ASIO_Output_EnableRefHack.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.Output),
+                false, src, "[Asio.Output] EnableRefCountHack");
 
-            // Input0
-            nUpDown_ASIO_Input0_Channel.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.ChannelIdentifier, ASIO.ReadSettings.Sections.Input0), 0);
-            checkBox_ASIO_Input0_ControlEndpointVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input0), 0));
-            checkBox_ASIO_Input0_ControlMasterVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input0), 0));
-            nUpDown_ASIO_Input0_MaxVolume.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.Input0), 0);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Input0_Channel,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.ChannelIdentifier, ASIO.ReadSettings.Sections.Input0),
+                ASIO.RsAsioLimits.Input0ChannelDefault,
+                ASIO.RsAsioLimits.ChannelMin, ASIO.RsAsioLimits.ChannelMax,
+                src, "[Asio.Input.0] Channel");
+            checkBox_ASIO_Input0_ControlEndpointVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input0),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Input.0] EnableSoftwareEndpointVolumeControl");
+            checkBox_ASIO_Input0_ControlMasterVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input0),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Input.0] EnableSoftwareMasterVolumeControl");
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Input0_MaxVolume,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.Input0),
+                ASIO.RsAsioLimits.VolumePercentDefault,
+                ASIO.RsAsioLimits.VolumePercentMin, ASIO.RsAsioLimits.VolumePercentMax,
+                src, "[Asio.Input.0] SoftwareMasterVolumePercent");
             checkBox_ASIO_Input0_Disabled.Checked = ASIO.ReadSettings.DisabledInput0;
             listBox_AvailableASIODevices_Input0.SelectedItem = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.DriverIdentifier, ASIO.ReadSettings.Sections.Input0);
-            checkBox_ASIO_Input0_EnableRefHack.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.Input0), 0));
+            checkBox_ASIO_Input0_EnableRefHack.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.Input0),
+                false, src, "[Asio.Input.0] EnableRefCountHack");
 
-            // Input1
-            nUpDown_ASIO_Input1_Channel.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.ChannelIdentifier, ASIO.ReadSettings.Sections.Input1), 0);
-            checkBox_ASIO_Input1_ControlEndpointVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input1), 0));
-            checkBox_ASIO_Input1_ControlMasterVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input1), 0));
-            nUpDown_ASIO_Input1_MaxVolume.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.Input1), 0);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Input1_Channel,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.ChannelIdentifier, ASIO.ReadSettings.Sections.Input1),
+                ASIO.RsAsioLimits.Input1ChannelDefault,
+                ASIO.RsAsioLimits.ChannelMin, ASIO.RsAsioLimits.ChannelMax,
+                src, "[Asio.Input.1] Channel");
+            checkBox_ASIO_Input1_ControlEndpointVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input1),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Input.1] EnableSoftwareEndpointVolumeControl");
+            checkBox_ASIO_Input1_ControlMasterVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.Input1),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Input.1] EnableSoftwareMasterVolumeControl");
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_Input1_MaxVolume,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.Input1),
+                ASIO.RsAsioLimits.VolumePercentDefault,
+                ASIO.RsAsioLimits.VolumePercentMin, ASIO.RsAsioLimits.VolumePercentMax,
+                src, "[Asio.Input.1] SoftwareMasterVolumePercent");
             checkBox_ASIO_Input1_Disabled.Checked = ASIO.ReadSettings.DisabledInput1;
             listBox_AvailableASIODevices_Input1.SelectedItem = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.DriverIdentifier, ASIO.ReadSettings.Sections.Input1);
-            checkBox_ASIO_Input1_EnableRefHack.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.Input1), 0));
+            checkBox_ASIO_Input1_EnableRefHack.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.Input1),
+                false, src, "[Asio.Input.1] EnableRefCountHack");
 
-            // InputMic
-            nUpDown_ASIO_InputMic_Channel.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.ChannelIdentifier, ASIO.ReadSettings.Sections.InputMic), 0);
-            checkBox_ASIO_InputMic_ControlEndpointVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.InputMic), 0));
-            checkBox_ASIO_InputMic_ControlMasterVolume.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.InputMic), 0));
-            nUpDown_ASIO_InputMic_MaxVolume.Value = GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.InputMic), 0);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_InputMic_Channel,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.ChannelIdentifier, ASIO.ReadSettings.Sections.InputMic),
+                ASIO.RsAsioLimits.InputMicChannelDefault,
+                ASIO.RsAsioLimits.ChannelMin, ASIO.RsAsioLimits.ChannelMax,
+                src, "[Asio.Input.Mic] Channel");
+            checkBox_ASIO_InputMic_ControlEndpointVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareEndpointVolumeControlIdentifier, ASIO.ReadSettings.Sections.InputMic),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Input.Mic] EnableSoftwareEndpointVolumeControl");
+            checkBox_ASIO_InputMic_ControlMasterVolume.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableSoftwareMasterVolumeControlIdentifier, ASIO.ReadSettings.Sections.InputMic),
+                ASIO.RsAsioLimits.EnableSoftwareVolumeControlDefault, src, "[Asio.Input.Mic] EnableSoftwareMasterVolumeControl");
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_ASIO_InputMic_MaxVolume,
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.SoftwareMasterVolumePercentIdentifier, ASIO.ReadSettings.Sections.InputMic),
+                ASIO.RsAsioLimits.VolumePercentDefault,
+                ASIO.RsAsioLimits.VolumePercentMin, ASIO.RsAsioLimits.VolumePercentMax,
+                src, "[Asio.Input.Mic] SoftwareMasterVolumePercent");
             checkBox_ASIO_InputMic_Disabled.Checked = ASIO.ReadSettings.DisabledInputMic;
             listBox_AvailableASIODevices_InputMic.SelectedItem = ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.DriverIdentifier, ASIO.ReadSettings.Sections.InputMic);
-            checkBox_ASIO_InputMic_EnableRefHack.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.InputMic), 0));
+            checkBox_ASIO_InputMic_EnableRefHack.Checked = SettingsSanitizer.SanitizeBool01(
+                ASIO.ReadSettings.ProcessSettings(ASIO.ReadSettings.EnableRefCountHackIdentifier, ASIO.ReadSettings.Sections.InputMic),
+                false, src, "[Asio.Input.Mic] EnableRefCountHack");
         }
 
         private void PriorSettings_LoadRocksmithSettings()
         {
-            // Audio Settings
+            const string src = "Rocksmith.ini";
 
-            checkBox_Rocksmith_EnableMicrophone.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableMicrophoneIdentifier), 1));
-            checkBox_Rocksmith_ExclusiveMode.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ExclusiveModeIdentifier), 1));
-            if (GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.LatencyBufferIdentifier), 16) <= 0 || GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.LatencyBufferIdentifier), 16) > 16)
-                SaveSettings_Rocksmith_Middleware(Rocksmith.ReadSettings.LatencyBufferIdentifier, "4");
-            nUpDown_Rocksmith_LatencyBuffer.Value = GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.LatencyBufferIdentifier), 4);
-            checkBox_Rocksmith_ForceWDM.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ForceWDMIdentifier), 0));
-            checkBox_Rocksmith_ForceDirextXSink.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ForceDirectXSinkIdentifier), 0));
-            checkBox_Rocksmith_DumpAudioLog.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.DumpAudioLogIdentifier), 0));
-            if (Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.MaxOutputBufferSizeIdentifier), 0)))
-                nUpDown_Rocksmith_MaxOutputBuffer.Value = GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.MaxOutputBufferSizeIdentifier), 0);
+            checkBox_Rocksmith_EnableMicrophone.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableMicrophoneIdentifier),
+                true, src, Rocksmith.ReadSettings.EnableMicrophoneIdentifier);
+            checkBox_Rocksmith_ExclusiveMode.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ExclusiveModeIdentifier),
+                true, src, Rocksmith.ReadSettings.ExclusiveModeIdentifier);
+
+            string rawLatency = Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.LatencyBufferIdentifier);
+            decimal latency = SettingsSanitizer.SafeSetNumericUpDown(
+                nUpDown_Rocksmith_LatencyBuffer, rawLatency, 4, src, Rocksmith.ReadSettings.LatencyBufferIdentifier);
+            if (!string.IsNullOrWhiteSpace(rawLatency)
+                && (!decimal.TryParse(rawLatency.Trim(), out decimal parsedLatency) || parsedLatency != latency))
+            {
+                Rocksmith.WriteSettings.SaveChanges(Rocksmith.ReadSettings.LatencyBufferIdentifier, ((int)latency).ToString());
+            }
+
+            checkBox_Rocksmith_ForceWDM.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ForceWDMIdentifier),
+                false, src, Rocksmith.ReadSettings.ForceWDMIdentifier);
+            checkBox_Rocksmith_ForceDirextXSink.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ForceDirectXSinkIdentifier),
+                false, src, Rocksmith.ReadSettings.ForceDirectXSinkIdentifier);
+            checkBox_Rocksmith_DumpAudioLog.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.DumpAudioLogIdentifier),
+                false, src, Rocksmith.ReadSettings.DumpAudioLogIdentifier);
+
+            string rawMaxBuf = Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.MaxOutputBufferSizeIdentifier);
+            int maxBuf = SettingsSanitizer.SanitizeInt(rawMaxBuf, 0, 0, (int)nUpDown_Rocksmith_MaxOutputBuffer.Maximum, src, Rocksmith.ReadSettings.MaxOutputBufferSizeIdentifier);
+            if (maxBuf != 0)
+                nUpDown_Rocksmith_MaxOutputBuffer.Value = maxBuf;
             else
                 checkBox_Rocksmith_Override_MaxOutputBufferSize.Checked = true;
-            checkBox_Rocksmith_RTCOnly.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RealToneCableOnlyIdentifier), 0));
-            checkBox_Rocksmith_LowLatencyMode.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.Win32UltraLowLatencyModeIdentifier), 1));
-            // Visual Settings
 
-            checkBox_Rocksmith_GamepadUI.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ShowGamepadUIIdentifier), 0));
-            nUpDown_Rocksmith_ScreenWidth.Value = GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ScreenWidthIdentifier), 0);
-            nUpDown_Rocksmith_ScreenHeight.Value = GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ScreenHeightIdentifier), 0);
-            switch (GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.FullscreenIdentifier), 2))
+            checkBox_Rocksmith_RTCOnly.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RealToneCableOnlyIdentifier),
+                false, src, Rocksmith.ReadSettings.RealToneCableOnlyIdentifier);
+            checkBox_Rocksmith_RightInputChannel.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.MonoToStereoChannelIdentifier),
+                false, src, Rocksmith.ReadSettings.MonoToStereoChannelIdentifier);
+            checkBox_Rocksmith_LowLatencyMode.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.Win32UltraLowLatencyModeIdentifier),
+                true, src, Rocksmith.ReadSettings.Win32UltraLowLatencyModeIdentifier);
+
+            checkBox_Rocksmith_GamepadUI.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ShowGamepadUIIdentifier),
+                false, src, Rocksmith.ReadSettings.ShowGamepadUIIdentifier);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_Rocksmith_ScreenWidth,
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ScreenWidthIdentifier),
+                0, src, Rocksmith.ReadSettings.ScreenWidthIdentifier);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_Rocksmith_ScreenHeight,
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.ScreenHeightIdentifier),
+                0, src, Rocksmith.ReadSettings.ScreenHeightIdentifier);
+
+            string rawFullscreen = Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.FullscreenIdentifier);
+            int fullscreen = SettingsSanitizer.SanitizeInt(rawFullscreen, 2, 0, 2, src, Rocksmith.ReadSettings.FullscreenIdentifier);
+            switch (fullscreen)
             {
                 case 0:
                     radio_Rocksmith_Windowed.Checked = true;
@@ -1217,21 +1462,44 @@ namespace RSMods
                 case 2:
                     radio_Rocksmith_ExclusiveFullScreen.Checked = true;
                     break;
-                default:
-                    break;
             }
-            nUpDown_Rocksmith_RenderWidth.Value = GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingWidthIdentifier), 0);
-            nUpDown_Rocksmith_RenderHeight.Value = GenUtil.StrToDecDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingHeightIdentifier), 0);
-            checkBox_Rocksmith_PostEffects.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnablePostEffectsIdentifier), 1));
-            checkBox_Rocksmith_Shadows.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableShadowsIdentifier), 1));
-            checkBox_Rocksmith_HighResScope.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableHighResScopeIdentifier), 1));
-            checkBox_Rocksmith_DepthOfField.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableDepthOfFieldIdentifier), 1));
-            checkBox_Rocksmith_PerPixelLighting.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnablePerPixelLightingIdentifier), 1));
-            checkBox_Rocksmith_MSAASamples.Checked = GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.MsaaSamplesIdentifier), 4) == 4;
-            checkBox_Rocksmith_DisableBrowser.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.DisableBrowserIdentifier), 0));
-            checkBox_Rocksmith_EnableRenderRes.Checked = (Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingWidthIdentifier) != "0" || Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingHeightIdentifier) != "0");
 
-            switch (GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.VisualQualityIdentifier), 1))
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_Rocksmith_RenderWidth,
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingWidthIdentifier),
+                0, src, Rocksmith.ReadSettings.RenderingWidthIdentifier);
+            SettingsSanitizer.SafeSetNumericUpDown(nUpDown_Rocksmith_RenderHeight,
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingHeightIdentifier),
+                0, src, Rocksmith.ReadSettings.RenderingHeightIdentifier);
+            checkBox_Rocksmith_PostEffects.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnablePostEffectsIdentifier),
+                true, src, Rocksmith.ReadSettings.EnablePostEffectsIdentifier);
+            checkBox_Rocksmith_Shadows.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableShadowsIdentifier),
+                true, src, Rocksmith.ReadSettings.EnableShadowsIdentifier);
+            checkBox_Rocksmith_HighResScope.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableHighResScopeIdentifier),
+                true, src, Rocksmith.ReadSettings.EnableHighResScopeIdentifier);
+            checkBox_Rocksmith_DepthOfField.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnableDepthOfFieldIdentifier),
+                true, src, Rocksmith.ReadSettings.EnableDepthOfFieldIdentifier);
+            checkBox_Rocksmith_PerPixelLighting.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.EnablePerPixelLightingIdentifier),
+                true, src, Rocksmith.ReadSettings.EnablePerPixelLightingIdentifier);
+
+            string rawMsaa = Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.MsaaSamplesIdentifier);
+            int msaa = SettingsSanitizer.SanitizeInt(rawMsaa, 4, 0, 16, src, Rocksmith.ReadSettings.MsaaSamplesIdentifier);
+            checkBox_Rocksmith_MSAASamples.Checked = msaa == 4;
+
+            checkBox_Rocksmith_DisableBrowser.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.DisableBrowserIdentifier),
+                false, src, Rocksmith.ReadSettings.DisableBrowserIdentifier);
+            checkBox_Rocksmith_EnableRenderRes.Checked = (
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingWidthIdentifier) != "0"
+                || Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.RenderingHeightIdentifier) != "0");
+
+            string rawVQ = Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.VisualQualityIdentifier);
+            int visualQuality = SettingsSanitizer.SanitizeInt(rawVQ, 1, 0, 3, src, Rocksmith.ReadSettings.VisualQualityIdentifier);
+            switch (visualQuality)
             {
                 case 0:
                     radio_Rocksmith_LowQuality.Checked = true;
@@ -1245,12 +1513,11 @@ namespace RSMods
                 case 3:
                     radio_Rocksmith_CustomQuality.Checked = true;
                     break;
-                default:
-                    break;
             }
 
-            // Network Settings
-            checkBox_Rocksmith_UseProxy.Checked = Convert.ToBoolean(GenUtil.StrToIntDef(Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.UseProxyIdentifier), 1));
+            checkBox_Rocksmith_UseProxy.Checked = SettingsSanitizer.SanitizeBool01(
+                Rocksmith.ReadSettings.ProcessSettings(Rocksmith.ReadSettings.UseProxyIdentifier),
+                true, src, Rocksmith.ReadSettings.UseProxyIdentifier);
         }
 
         #endregion
@@ -1852,7 +2119,6 @@ namespace RSMods
         private void SetForget_LoadSetAndForgetMods()
         {
             SetAndForgetMods.LoadDefaultFiles();
-            SetAndForgetMods.UnpackCachePsarc(); // We need to unpack the cache AGAIN in-case the user resets their psarc, and we don't know.
             SetForget_FillUI();
             SetForget_SetTunerColors();
         }
@@ -2798,7 +3064,9 @@ namespace RSMods
                 return;
 
             if (checkBox_ModsLog.Checked)
-                File.Create(Path.Combine(GenUtil.GetRSDirectory(), "RSMods_debug.txt"));
+                // Dispose the stream immediately so we don't hold a write-denying
+                // handle that blocks the DLL from opening the log at game launch.
+                File.Create(Path.Combine(GenUtil.GetRSDirectory(), "RSMods_debug.txt")).Dispose();
             else
             {
                 // First we have to do garbage cleanup since it keeps the file in use way too long.
@@ -2896,6 +3164,23 @@ namespace RSMods
 
         private void Save_FixBrokenTones(object sender, EventArgs e) => SaveSettings_Save(ReadSettings.FixBrokenTonesIdentifier, checkBox_FixBrokenTones.Checked.ToString().ToLower());
 
+        private void Save_FastProfileLoadAndSave(object sender, EventArgs e)
+        {
+            SaveSettings_Save(ReadSettings.FastProfileLoadAndSaveIdentifier, checkBox_FastProfileLoadAndSave.Checked.ToString().ToLower());
+            ProfileBackups_RequireForFastLoadAndSave();
+        }
+
+        /// <summary>
+        /// Fast profile load/save changes how the game writes the profile, so Backup Profile is always on with it.
+        /// The game won't turn on fast load/save unless backups are on too.
+        /// </summary>
+        private void ProfileBackups_RequireForFastLoadAndSave()
+        {
+            if (checkBox_FastProfileLoadAndSave.Checked)
+                checkBox_BackupProfile.Checked = true;
+            checkBox_BackupProfile.Enabled = !checkBox_FastProfileLoadAndSave.Checked;
+        }
+
         private void Save_UseCustomNSPTimer(object sender, EventArgs e)
         {
             SaveSettings_Save(ReadSettings.UseCustomNSPTimerIdentifier, checkBox_CustomNSPTimer.Checked.ToString().ToLower());
@@ -2904,6 +3189,8 @@ namespace RSMods
 
         private void Save_DisplaySongAccuracy(object sender, EventArgs e) => SaveSettings_Save(ReadSettings.DisplayCurrentAccuracyIdentifier, checkBox_DisplayCurrentAccuracy.Checked.ToString().ToLower());
         private void Save_PreventMidSongPause(object sender, EventArgs e) => SaveSettings_Save(ReadSettings.PreventMidSongPauseIdentifier, checkBox_PreventMidSongPause.Checked.ToString().ToLower());
+        private void Save_UseExactColors(object sender, EventArgs e) => SaveSettings_Save(ReadSettings.UseExactColorsIdentifier, checkBox_UseExactColors.Checked.ToString().ToLower());
+        private void Save_Ultrawide(object sender, EventArgs e) => SaveSettings_Save(ReadSettings.UltrawideIdentifier, checkBox_Ultrawide.Checked.ToString().ToLower());
 
         private void Save_NSPTimer(object sender, EventArgs e) => SaveSettings_Save(ReadSettings.CustomNSPTimeLimitIdentifier, ((int)(nUpDown_NSPTimer.Value * 1000)).ToString());
 
@@ -3781,7 +4068,7 @@ namespace RSMods
             label_TwitchChannelIDVal.DataBindings.Add(new Binding("Text", TwitchSettings.Get, "ChannelID", false, DataSourceUpdateMode.OnPropertyChanged));
             label_TwitchAccessTokenVal.DataBindings.Add(new Binding("Text", TwitchSettings.Get, "AccessToken", false, DataSourceUpdateMode.OnPropertyChanged));
 
-            // Hide values by default (Security just incase the streamer is live with RSMods on screen)
+            // Hide values by default (Security just in case the streamer is live with RSMods on screen)
             label_TwitchUsernameVal.DataBindings.Add(new Binding("Visible", checkBox_RevealTwitchAuthToken, "Checked", false, DataSourceUpdateMode.OnPropertyChanged));
             label_TwitchChannelIDVal.DataBindings.Add(new Binding("Visible", checkBox_RevealTwitchAuthToken, "Checked", false, DataSourceUpdateMode.OnPropertyChanged));
             label_TwitchAccessTokenVal.DataBindings.Add(new Binding("Visible", checkBox_RevealTwitchAuthToken, "Checked", false, DataSourceUpdateMode.OnPropertyChanged));
@@ -4196,8 +4483,23 @@ namespace RSMods
         #endregion
         #region RS_ASIO
 
-        // Config
-        private void ASIO_WASAPI_Output(object sender, EventArgs e) => SaveSettings_ASIO_Middleware(ASIO.ReadSettings.EnableWasapiOutputsIdentifier, ASIO.ReadSettings.Sections.Config, Convert.ToInt32(checkBox_ASIO_WASAPI_Output.Checked).ToString());
+        private void ASIO_WASAPI_Output(object sender, EventArgs e)
+        {
+            string value;
+            switch (checkBox_ASIO_WASAPI_Output.CheckState)
+            {
+                case CheckState.Checked:
+                    value = "1";
+                    break;
+                case CheckState.Indeterminate:
+                    value = "-1";
+                    break;
+                default:
+                    value = "0";
+                    break;
+            }
+            SaveSettings_ASIO_Middleware(ASIO.ReadSettings.EnableWasapiOutputsIdentifier, ASIO.ReadSettings.Sections.Config, value);
+        }
         private void ASIO_WASAPI_Input(object sender, EventArgs e) => SaveSettings_ASIO_Middleware(ASIO.ReadSettings.EnableWasapiInputsIdentifier, ASIO.ReadSettings.Sections.Config, Convert.ToInt32(checkBox_ASIO_WASAPI_Input.Checked).ToString());
         private void ASIO_ASIO(object sender, EventArgs e) => SaveSettings_ASIO_Middleware(ASIO.ReadSettings.EnableAsioIdentifier, ASIO.ReadSettings.Sections.Config, Convert.ToInt32(checkBox_ASIO_ASIO.Checked).ToString());
 
@@ -4262,22 +4564,21 @@ namespace RSMods
                 SaveSettings_ASIO_Middleware(ASIO.ReadSettings.DriverIdentifier, ASIO.ReadSettings.Sections.InputMic, "");
         }
 
-        // Buffer Size
         private void ASIO_BufferSize_Driver(object sender, EventArgs e)
         {
             if (radio_ASIO_BufferSize_Driver.Checked)
-                SaveSettings_ASIO_Middleware(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio, "driver");
+                SaveSettings_ASIO_Middleware(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio, ASIO.RsAsioLimits.BufferModeDriver);
         }
         private void ASIO_BufferSize_Host(object sender, EventArgs e)
         {
             if (radio_ASIO_BufferSize_Host.Checked)
-                SaveSettings_ASIO_Middleware(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio, "host");
+                SaveSettings_ASIO_Middleware(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio, ASIO.RsAsioLimits.BufferModeHost);
         }
         private void ASIO_BufferSize_Custom(object sender, EventArgs e)
         {
             label_ASIO_CustomBufferSize.Visible = radio_ASIO_BufferSize_Custom.Checked;
             nUpDown_ASIO_CustomBufferSize.Visible = radio_ASIO_BufferSize_Custom.Checked;
-            SaveSettings_ASIO_Middleware(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio, "custom");
+            SaveSettings_ASIO_Middleware(ASIO.ReadSettings.BufferSizeModeIdentifier, ASIO.ReadSettings.Sections.Asio, ASIO.RsAsioLimits.BufferModeCustom);
         }
         private void ASIO_CustomBufferSize(object sender, EventArgs e) => SaveSettings_ASIO_Middleware(ASIO.ReadSettings.CustomBufferSizeIdentifier, ASIO.ReadSettings.Sections.Asio, nUpDown_ASIO_CustomBufferSize.Value.ToString());
 
@@ -4360,6 +4661,7 @@ namespace RSMods
                 checkBox_Rocksmith_Override_MaxOutputBufferSize.Checked = true;
         }
         private void Rocksmith_RTCOnly(object sender, EventArgs e) => SaveSettings_Rocksmith_Middleware(Rocksmith.ReadSettings.RealToneCableOnlyIdentifier, checkBox_Rocksmith_RTCOnly.Checked.ToString().ToLower());
+        private void Rocksmith_RightInputChannel(object sender, EventArgs e) => SaveSettings_Rocksmith_Middleware(Rocksmith.ReadSettings.MonoToStereoChannelIdentifier, checkBox_Rocksmith_RightInputChannel.Checked.ToString().ToLower());
         private void Rocksmith_LowLatencyMode(object sender, EventArgs e) => SaveSettings_Rocksmith_Middleware(Rocksmith.ReadSettings.Win32UltraLowLatencyModeIdentifier, checkBox_Rocksmith_LowLatencyMode.Checked.ToString().ToLower());
 
         private void Rocksmith_AutomateMaxBufferSize(object sender, EventArgs e)
@@ -4910,31 +5212,14 @@ namespace RSMods
 
         private void Profiles_RevertToBackup(object sender, EventArgs e)
         {
-            if (listBox_Profiles_ListBackups.SelectedIndex < 0)
+            if (!(listBox_Profiles_ListBackups.SelectedItem is Profiles.ProfileBackup backup))
                 return;
 
-            string localizedName = listBox_Profiles_ListBackups.SelectedItem.ToString();
-
-            int monthNumber = DateTime.ParseExact(localizedName.Split(' ')[0], "MMM", CultureInfo.CurrentCulture).Month;
-
-            string[] localizedSplit = localizedName.Split(' ');
-
-            string time = localizedSplit[4];
-
-            time = time.Replace(':', '-');
-
-            string month = monthNumber.ToString();
-
-            if (monthNumber < 10)
-                month = "0" + monthNumber.ToString();
-
-            string backupName = month + '-' + localizedSplit[1] + '-' + localizedSplit[2] + '_' + time;
-
-            foreach (string profile in Directory.GetFiles(Path.Combine(GenUtil.GetRSDirectory(), "Profile_Backups", backupName)))
+            // File.Copy writes new files into the save folder, so the backup's files (which other backups may share) are never changed.
+            foreach (string profile in Directory.GetFiles(backup.Folder))
                 File.Copy(profile, Path.Combine(Profiles.GetSaveDirectory(), Path.GetFileName(profile)), true);
 
-
-            MessageBox.Show($"Reverted to the backup: {localizedName}");
+            MessageBox.Show($"Reverted to the backup: {backup}");
         }
 
         private void Profiles_ImportToneManifest(object sender, EventArgs e)
@@ -5381,7 +5666,7 @@ namespace RSMods
                         MessageBox.Show("Don't forget to hit \"Repack Audio Psarc\" when you're done.");
                     }
                     else
-                        MessageBox.Show("An error occured when converting your file.\nPlease contact the RSMods devs.");
+                        MessageBox.Show("An error occurred when converting your file.\nPlease contact the RSMods devs.");
 
                 }
             }

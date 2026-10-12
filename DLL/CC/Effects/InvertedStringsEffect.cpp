@@ -21,15 +21,15 @@ namespace CrowdControl::Effects {
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus InvertedStringsEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus InvertedStringsEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("InvertedStringsEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
@@ -84,13 +84,10 @@ namespace CrowdControl::Effects {
 	/// Save the original positions of the guitar / bass strings, then inverting them.
 	/// </summary>
 	/// <param name="request"></param>
-	/// <returns>EffectStatus::Success if completed successfully, or EffectStatus::Retry if we can't run it.</returns>
-	EffectStatus InvertedStringsEffect::Start(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if completed successfully, or Enums::EffectStatus::Retry if we can't run it.</returns>
+	Enums::EffectStatus InvertedStringsEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("InvertedStringsEffect::Start()" << std::endl);
-
-		if (!CanStart())
-			return EffectStatus::Retry;
 
 		SaveInitialStringPos();
 		InvertStringPositions();
@@ -98,20 +95,20 @@ namespace CrowdControl::Effects {
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus InvertedStringsEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus InvertedStringsEffect::OnStop()
 	{
 		LOG_INFO("InvertedStringsEffect::Stop()" << std::endl);
 
 		running = false;
 		RevertStringPositions();
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

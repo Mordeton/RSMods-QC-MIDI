@@ -1,0 +1,38 @@
+name: Development builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/bazzite-development']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run portable framework and QC timeline tests
+        run: python3 scripts/test-linux.py
+      - name: Check Linux tools
+        run: python3 -m unittest discover -s scripts/tests -v
+
+  windows-build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run framework tests
+        shell: pwsh
+        run: ./DLL/Framework/Tests/BuildAndRun.ps1
+      - name: Build development package
+        shell: pwsh
+        run: ./build-rsmods-deliverable.ps1 -VersionTag "linux-dev-${{ github.sha }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rsmods-qc-development
+          path: |
+            dist/*-portable.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error

@@ -1,5 +1,8 @@
 #include "../../stdafx.h"
 #include "DrunkModeEffect.hpp"
+#include "../../Framework/Framework.hpp"
+
+namespace Setting = Settings::Setting;
 
 using namespace CrowdControl::Enums;
 
@@ -9,50 +12,51 @@ namespace CrowdControl::Effects { // Makes some of game's object very woobly (ly
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus DrunkModeEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus DrunkModeEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("DrunkModeEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Drunk mode is achieved by writing different continuously values to a variable controlling the horizontal position of the camera
 	/// Loft needs to be enabled for it to have the full effect, so we also call ToggleDrunkMode
 	/// </summary>
-	/// <returns> EffectStatus::Retry if we aren't currently in a song or incompatible effects are running, or EffectStatus::Success if we are</returns>
-	EffectStatus DrunkModeEffect::Start(const Request& request)
+	/// <returns> Enums::EffectStatus::Retry if we aren't currently in a song or incompatible effects are running, or Enums::EffectStatus::Success if we are</returns>
+	Enums::EffectStatus DrunkModeEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("DrunkModeEffect::Start()" << std::endl);
 
-		if (!CanStart())
-			return EffectStatus::Retry;
-
-		Settings::UpdateTwitchSetting("DrunkMode", "on");
+		Framework::Registry().EnqueueSettingsUpdate([] {
+			Settings::UpdateTwitchSetting(Setting::Twitch::DrunkMode, "on");
+		});
 		Loft::ToggleDrunkMode(true);
 
 		SetDuration(request);
 		running = true;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus DrunkModeEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus DrunkModeEffect::OnStop()
 	{
 		LOG_INFO("DrunkModeEffect::Stop()" << std::endl);
 
 		running = false;
 		Loft::ToggleDrunkMode(false);
-		Settings::UpdateTwitchSetting("DrunkMode", "off");
+		Framework::Registry().EnqueueSettingsUpdate([] {
+			Settings::UpdateTwitchSetting(Setting::Twitch::DrunkMode, "off");
+		});
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 }

@@ -1,7 +1,12 @@
 #include "../stdafx.h"
 #include "ControlServer.hpp"
 
-#include <process.h>
+#include <array>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <stop_token>
+#include <thread>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -16,17 +21,42 @@
 using namespace CrowdControl::Effects;
 using namespace CrowdControl::EffectList;
 using namespace CrowdControl::Enums;
+using namespace CrowdControl::Structs;
 using nlohmann::json;
 
 namespace CrowdControl {
-	int sock;
-	bool serverStarted = false;
+	namespace {
+		std::jthread connectionThread;
+		std::jthread effectThread;
+		std::jthread objectUpdateThread;
+
+		std::mutex waitMutex;
+		std::condition_variable_any wake;
+		std::mutex effectsMutex;
+
+		std::atomic<SOCKET> activeSocket{ INVALID_SOCKET };
+
+		bool WaitFor(std::stop_token stop, std::chrono::milliseconds duration) {
+			std::unique_lock lock(waitMutex);
+			wake.wait_for(lock, stop, duration, [] { return false; });
+			return stop.stop_requested();
+		}
+
+		void CloseActiveSocket() {
+			const SOCKET socket = activeSocket.exchange(INVALID_SOCKET);
+			if (socket == INVALID_SOCKET) return;
+
+			closesocket(socket);
+		}
+	}
 
 	/// <summary>
 	/// Runs/stops the current effect
 	/// Effects are started externally (from CC or RSMods GUI), but each effect stops itself by running the Run method, which in turn calls Stop when the effect's duration runs out
 	/// </summary>
 	Response RunCommand(const Request& request) {
+		std::lock_guard lock(effectsMutex);
+
 		Response resp{
 			request.id,
 			request.code,
@@ -60,10 +90,9 @@ namespace CrowdControl {
 	}
 
 	/// <summary>
-	/// Sends a response through the same socket it received the request from
-	/// If the effect was started, it sends a Response with code 0 (Success), otherwise it sends a Response with code 3 (Retry)
+	/// Sends response to Crowd Control over TCP socket.
 	/// </summary>
-	void SendResponse(const Response& response) {
+	void SendResponse(SOCKET socket, const Response& response) {
 		//Serialize response
 		json j;
 		CrowdControl::Structs::to_json_response(j, response);
@@ -72,70 +101,50 @@ namespace CrowdControl {
 		LOG_INFO("Responding: " << jsonstr.c_str() << std::endl);
 
 		//Send response
-		send(sock, jsonstr.c_str(), jsonstr.length(), NULL);
-
-		//Send null terminator
-		char buffer[1] = { 0 };
-		send(sock, buffer, sizeof(buffer), NULL);
+		send(socket, jsonstr.c_str(), jsonstr.length() + 1, 0); // Include null terminator for CC
 	}
 
 	/// <summary>
-	/// Waits for incoming requests, which are null terminated
-	/// If the client's connection is closed, the current message length will be -1, hence the server can be stopped
-	/// When a request is received, parse it as JSON, run the corresponding effect if no incompatible effects are currently running 
+	/// Read the socket and perform the effects.
 	/// If the effect was started, it sends a Response with code 0 (Success), otherwise it sends a Response with code 3 (Retry)
 	/// </summary>
-	void ClientLoop() {
+	void ClientLoop(std::stop_token stop, SOCKET socket) {
 		LOG_INFO("Starting crowd control client loop" << std::endl);
 
-		int currentMessageLength = 0;
-		int bytesRead = 0;
-		char buffer[1024];
-
-		while (!GameState::GameClosing) {
-			//Receive command
-			currentMessageLength = 0;
-
-			do {
-				//Read one byte at a time until null byte is read
-				if (currentMessageLength >= sizeof(buffer)) {
-					LOG_ERROR("Current message is longer than buffer size" << std::endl);
-					return;
-				}
-
-				//Read 1 byte from socket
-				bytesRead = recv(sock, buffer + currentMessageLength, 1, NULL);
-
-				//If last byte was null byte, exit recv loop
-				if (bytesRead > 0 && buffer[currentMessageLength] == NULL) break;
-
-				currentMessageLength += bytesRead;
-			} while (bytesRead > 0);
-
-			if (currentMessageLength == -1) { //Usually happens when the connection closes (i.e. when the server is down)
-				serverStarted = false;
-				break;
+		std::array<char, 512> buffer{};
+		while (!stop.stop_requested()) {
+			size_t currentMessageLength = 0;
+			while (currentMessageLength < buffer.size()) {
+				const int bytesRead = recv(socket, buffer.data() + currentMessageLength, 1, 0);
+				if (bytesRead <= 0) return;
+				if (buffer[currentMessageLength] == '\0') break;
+				++currentMessageLength;
 			}
 
-			//Parse command
-			std::string command = std::string(&buffer[0], &buffer[currentMessageLength]);
+			if (currentMessageLength == buffer.size()) {
+				LOG_ERROR("Current message is longer than buffer size" << std::endl);
+				return;
+			}
 
-			json j = json::parse(command);
+			try {
+				const std::string command(buffer.data(), currentMessageLength);
+				const json j = json::parse(command);
 
-			LOG_INFO("Received command:" << std::endl);
-			LOG_INFO(j.dump(2) << std::endl);
+				LOG_INFO("Received command:" << std::endl);
+				LOG_INFO(j.dump(2) << std::endl);
 
-			Request request;
-			CrowdControl::Structs::from_json_request(j, request);
+				Request request;
+				CrowdControl::Structs::from_json_request(j, request);
 
-			//Run command
-			LOG_INFO("Running command" << std::endl);
-			const Response response = RunCommand(request);
+				LOG_INFO("Running command" << std::endl);
+				const Response response = RunCommand(request);
 
-			//Respond
-			LOG_INFO("Responding to command" << std::endl);
-
-			SendResponse(response);
+				LOG_INFO("Responding to command" << std::endl);
+				SendResponse(socket, response);
+			}
+			catch (const std::exception& ex) {
+				LOG_ERROR("Invalid Crowd Control request: " << ex.what() << std::endl);
+			}
 		}
 	}
 
@@ -143,10 +152,12 @@ namespace CrowdControl {
 	/// Opens a TCP socket on localhost, port 45659
 	/// If a socket has been successfully opened, it connects to the effect client (CrowdControl or RSMods GUI)
 	/// </summary>
-	/// <returns>NULL. Loops while the game is open</returns>
-	unsigned WINAPI CrowdControlThread() {
-		while (!GameState::GameLoaded)
-			Sleep(5000);
+	void CrowdControlThread(std::stop_token stop) {
+		using namespace std::chrono_literals;
+
+		while (!GameState::GameLoaded.load()) {
+			if (WaitFor(stop, 5s)) return;
+		}
 
 		LOG_INFO("Crowd control server starting" << std::endl);
 
@@ -159,38 +170,45 @@ namespace CrowdControl {
 		//Resolve and convert ip address
 		if (inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr) <= 0) {
 			LOG_ERROR("Invalid address" << std::endl);
-			return -1;
+			return;
 		}
 
-		while (!GameState::GameClosing) {
+		while (!stop.stop_requested()) {
 			LOG_INFO("Trying to connect to crowd control" << std::endl);
 
 			//Open socket
-			if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+			const SOCKET socket = ::socket(AF_INET, SOCK_STREAM, 0);
+			if (socket == INVALID_SOCKET) {
 				LOG_ERROR("Unable to open socket for crowd control" << std::endl);
-				return -1;
+				return;
+			}
+
+			activeSocket.store(socket);
+			if (stop.stop_requested()) {
+				CloseActiveSocket();
+				return;
 			}
 
 			//Connect
-			int connectErr = connect(sock, (struct sockaddr*)&server_address, sizeof(server_address));
-			if (connectErr < 0) {
-				LOG_ERROR("Unable to connect to crowd control - " << connectErr << std::endl);
-				return -1;
+			const int connectErr = connect(socket, reinterpret_cast<const sockaddr*>(&server_address), sizeof(server_address));
+			if (connectErr == SOCKET_ERROR) {
+				const int err = WSAGetLastError();
+				LOG_ERROR("Unable to connect to crowd control - " << err << std::endl);
+				CloseActiveSocket();
+				return;
 			}
-			else
-				serverStarted = true;
 
 			LOG_INFO("Connected to crowd control" << std::endl);
 
 			//Do client loop
-			ClientLoop();
+			ClientLoop(stop, socket);
+			CloseActiveSocket();
 
 			LOG_INFO("Disconnected from crowd control" << std::endl);
+			break;
 		}
 
 		LOG_INFO("Crowd control stopping" << std::endl);
-
-		return 0;
 	}
 
 	/// <summary>
@@ -198,67 +216,84 @@ namespace CrowdControl {
 	/// Calls all the effects in the list (AllEffects)
 	/// If the current effect isn't enabled, there will be no visible effects 
 	/// </summary>
-	/// <returns>NULL. Loops while the game is open</returns>
-	unsigned WINAPI EffectRunThread() {
-		while (!GameState::GameLoaded)
-			Sleep(5000);
+	void EffectRunThread(std::stop_token stop) {
+		using namespace std::chrono_literals;
 
-		while (!GameState::GameClosing) {
-			// Iterate through all effects
-			for (auto it = GetAllEffects().begin(); it != GetAllEffects().end(); ++it) {
-				// Run/Update all effects
-				it->second->Run();
-			}
-
-			Sleep(10);
+		while (!GameState::GameLoaded.load()) {
+			if (WaitFor(stop, 5s)) return;
 		}
 
-		return 0;
+		while (!stop.stop_requested()) {
+			// Iterate through all effects
+			{
+				std::lock_guard lock(effectsMutex);
+				for (const auto& entry : GetAllEffects()) {
+					entry.second->Run();
+				}
+			}
+
+			if (WaitFor(stop, 10ms)) return;
+		}
 	}
 
 	/// <summary>
 	/// Object scaling effects need to be reapplied, because they are applied for each object separately 
 	/// These effects cannot be used in Guitarcade modes
 	/// </summary>
-	/// <returns>NULL. Loops while the game is open</returns>
-	unsigned WINAPI ObjectUtilUpdateThread() {
-		while (!GameState::GameLoaded)
-			Sleep(5000);
+	void ObjectUtilUpdateThread(std::stop_token stop) {
+		using namespace std::chrono_literals;
 
-		while (!GameState::GameClosing) {
+		while (!GameState::GameLoaded.load()) {
+			if (WaitFor(stop, 5s)) return;
+		}
+
+		while (!stop.stop_requested()) {
 			if (GameState::IsInSong()) // Guitarcade games crash if UpdateScales is run. So we will just sleep.
 				ObjectUtil::UpdateScales();
 
-			Sleep(1000);
+			if (WaitFor(stop, 1s)) return;
 		}
-
-		return 0;
 	}
 
 	/// <summary>
-	/// Starts the main server loop
-	/// If it has been stopped (or hasn't ever been started), it restarts it
+	/// Starts or restarts only the TCP connection worker.
 	/// </summary>
-	/// <returns>Nothing</returns>
 	void StartServerLoop() {
-		if (!serverStarted)
-			std::thread(CrowdControlThread).detach();
+		connectionThread.request_stop();
+		CloseActiveSocket();
+		wake.notify_all();
+
+		if (connectionThread.joinable()) connectionThread.join();
+		connectionThread = std::jthread(CrowdControlThread);
 	}
 
 	/// <summary>
 	/// Starts the necessary threads to listen and respond to Crowd Control requests
 	/// </summary>
 	void StartServer() {
-		// Main TCP socket thread
+		if (connectionThread.joinable()) return;
+
 		StartServerLoop();
-		// Effect updating thread
-		std::thread(EffectRunThread).detach();
-		// Object util scale updater thread
-		std::thread(ObjectUtilUpdateThread).detach();
+		effectThread = std::jthread(EffectRunThread);
+		objectUpdateThread = std::jthread(ObjectUtilUpdateThread);
 
 		// Patch scroll speed to be 10x faster
 		MemUtil::PatchAdr(Offsets::patch_scrollSpeedLTTarget, (UINT*)Offsets::patch_scrollSpeedChange, 3);
 		MemUtil::PatchAdr(Offsets::patch_scrollSpeedGTTarget, (UINT*)Offsets::patch_scrollSpeedChange, 3);
+	}
+
+	void StopServer() {
+		connectionThread.request_stop();
+		effectThread.request_stop();
+		objectUpdateThread.request_stop();
+
+		// request_stop() cannot interrupt a blocking recv(), so close the socket as well.
+		CloseActiveSocket();
+		wake.notify_all();
+
+		if (connectionThread.joinable()) connectionThread.join();
+		if (effectThread.joinable()) effectThread.join();
+		if (objectUpdateThread.joinable()) objectUpdateThread.join();
 	}
 
 	namespace Structs {

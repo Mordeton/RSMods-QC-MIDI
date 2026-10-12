@@ -8,23 +8,23 @@ namespace CrowdControl::Effects {
 	public:
 		explicit SolidNotesRandomEffect(int64_t durationMilliseconds) {
 			duration_ms = durationMilliseconds;
-
-			incompatibleEffects = { "removenotes", "transparentnotes", "solidcustom", "solidcustomrgb", "rainbownotes" };
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
-		EffectStatus Stop() override;
-
-		/**
-		 * \brief Can this effect start? By default checks that a song is being played, no incompatible effects are running, and this effect is not running
-		 * \return True when this effect can start, false otherwise
-		 */
 		bool CanStart() override
 		{
-			return ERMode::ColorsSaved && GameState::IsInSong() && !AreIncompatibleEffectsRunning() && !running;
+			return ERMode::ColorsSaved && CCEffect::CanStart();
 		}
 
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "note-visuals" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request) override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 	};
 
 	class SolidNotesCustomEffect : public CCEffect
@@ -32,13 +32,18 @@ namespace CrowdControl::Effects {
 	public:
 		explicit SolidNotesCustomEffect(int64_t durationMilliseconds) {
 			duration_ms = durationMilliseconds;
-
-			incompatibleEffects = { "removenotes", "transparentnotes", "solidrandom", "solidcustomrgb", "rainbownotes" };
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
-		EffectStatus Stop() override;
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "note-visuals" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request) override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 	};
 
 	class SolidNotesCustomRGBEffect : public CCEffect
@@ -46,12 +51,17 @@ namespace CrowdControl::Effects {
 	public:
 		explicit SolidNotesCustomRGBEffect(int64_t durationMilliseconds) {
 			duration_ms = durationMilliseconds;
-
-			incompatibleEffects = { "removenotes", "transparentnotes", "solidcustom", "solidrandom", "rainbownotes" };
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
-		EffectStatus Stop() override;
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "note-visuals" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request) override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 	};
 }

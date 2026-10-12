@@ -8,10 +8,17 @@ namespace CrowdControl::Effects {
 			duration_ms = durationMilliseconds;
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "player-volume" };
+		}
+
+		Enums::EffectStatus Test(const Structs::Request& request) override;
 		void Run() override;
-		EffectStatus Stop() override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 
 	private:
 		float oldVolume = 100.0f;

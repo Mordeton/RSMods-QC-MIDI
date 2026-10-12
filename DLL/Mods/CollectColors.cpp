@@ -356,31 +356,31 @@ float CollectColors::Max(float fR, float fG, float fB) {
 /// <param name="H"> - Hue **OUTPUT**</param>
 /// <param name="S"> - Saturation **OUTPUT**</param>
 /// <param name="L"> - Lightness **OUTPUT**</param>
-void CollectColors::RGB2HSL(float R, float G, float B, int& H, float& S, float& L) { //R,G,B [0,1], H [0,360], S,L [0,1] 
-	float min = Min(R, G, B);
-	float max = Max(R, G, B);
+void CollectColors::RGB2HSL(float inR, float inG, float inB, int& outH, float& outS, float& outL) { //R,G,B [0,1], H [0,360], S,L [0,1] 
+	float minVal = Min(inR, inG, inB);
+	float maxVal = Max(inR, inG, inB);
 	float d, h;
 
-	L = (min + max) / 2;
+	outL = (minVal + maxVal) / 2;
 
-	if (max != min) {
-		d = max - min;
+	if (maxVal != minVal) {
+		d = maxVal - minVal;
 
-		S = (L <= 0.5) ? (d / (min + max)) : (d / (2 - max - min));
+		outS = (outL <= 0.5) ? (d / (minVal + maxVal)) : (d / (2 - maxVal - minVal));
 
-		if (R == max)
-			h = (G - B) / d;
-		else if (G == max)
-			h = 2 + (B - R) / d;
-		else if (B == max)
-			h = 4 + (R - G) / d;
+		if (inR == maxVal)
+			h = (inG - inB) / d;
+		else if (inG == maxVal)
+			h = 2 + (inB - inR) / d;
+		else if (inB == maxVal)
+			h = 4 + (inR - inG) / d;
 		else
 			h = 0.0f;
 
-		H = 60 * h;
+		outH = static_cast<int>(60 * h);
 
-		if (H < 0)
-			H += 360;
+		if (outH < 0)
+			outH += 360;
 	}
 }
 
@@ -393,37 +393,37 @@ void CollectColors::RGB2HSL(float R, float G, float B, int& H, float& S, float& 
 /// <param name="R"> - Red **OUTPUT**</param>
 /// <param name="G"> - Green **OUTPUT**</param>
 /// <param name="B"> - Blue **OUTPUT**</param>
-void CollectColors::HSL2RGB(float H, float S, float L, float& R, float& G, float& B) {
-	float v, min, sv, fract, vsf, mid1, mid2;
+void CollectColors::HSL2RGB(float inH, float inS, float inL, float& outR, float& outG, float& outB) {
+	float v, minVal, sv, fract, vsf, mid1, mid2;
 	int sextant;
 
-	v = (float)(((double)L <= 0.5) ? ((double)L * (1.0 + (double)S)) : ((double)L + (double)S - (double)L * (double)S));
+	v = (float)(((double)inL <= 0.5) ? ((double)inL * (1.0 + (double)inS)) : ((double)inL + (double)inS - (double)inL * (double)inS));
 
 	if (v > 0) {
-		min = 2 * L - v;
-		sv = (v - min) / v;
-		H = (H == 360) ? 0 : H / 60;
+		minVal = 2 * inL - v;
+		sv = (v - minVal) / v;
+		inH = (inH == 360) ? 0 : inH / 60;
 
-		sextant = (int)floor(H);
-		fract = H - sextant;
+		sextant = (int)floor(inH);
+		fract = inH - sextant;
 		vsf = v * sv * fract;
-		mid1 = min + vsf;
+		mid1 = minVal + vsf;
 		mid2 = v - vsf;
 
 		switch (sextant)
 		{
-			case 0: R = v; G = mid1; B = min; break;
-			case 1: R = mid2; G = v; B = min; break;
-			case 2: R = min; G = v; B = mid1; break;
-			case 3: R = min; G = mid2; B = v; break;
-			case 4: R = mid1; G = min; B = v; break;
-			case 5: R = v; G = min; B = mid2; break;
+			case 0: outR = v; outG = mid1; outB = minVal; break;
+			case 1: outR = mid2; outG = v; outB = minVal; break;
+			case 2: outR = minVal; outG = v; outB = mid1; break;
+			case 3: outR = minVal; outG = mid2; outB = v; break;
+			case 4: outR = mid1; outG = minVal; outB = v; break;
+			case 5: outR = v; outG = minVal; outB = mid2; break;
 		}
 	}
 	else {
-		R = 0.0f;
-		G = 0.0f;
-		B = 0.0f;
+		outR = 0.0f;
+		outG = 0.0f;
+		outB = 0.0f;
 	}
 }
 
@@ -444,4 +444,135 @@ void CollectColors::SetColors(RSColor color) {
 	B = color.b;
 
 	RGB2HSL(R, G, B, H, S, L);
+}
+
+// Use Exact Colors
+
+namespace {
+	float WrapHue(float hue) {
+		hue = fmodf(hue, 360.0f);
+
+		if (hue < 0.0f)
+			hue += 360.0f;
+
+		return hue;
+	}
+
+	float Clamp01(float value) {
+		if (value < 0.0f) return 0.0f;
+		if (value > 1.0f) return 1.0f;
+		return value;
+	}
+}
+
+/// <summary>
+/// Convert RGB to HSL, keeping the hue as a float.
+/// </summary>
+CollectColors::HSLColor CollectColors::ToHSL(const RSColor& color) {
+	const float maxVal = Max(color.r, color.g, color.b);
+	const float minVal = Min(color.r, color.g, color.b);
+	const float delta = maxVal - minVal;
+
+	HSLColor out;
+	out.l = (maxVal + minVal) / 2.0f;
+
+	if (delta <= 0.0f) // Grey, so there is no hue or saturation.
+		return out;
+
+	out.s = (out.l <= 0.5f) ? delta / (maxVal + minVal) : delta / (2.0f - maxVal - minVal);
+
+	float hue;
+	if (color.r == maxVal)
+		hue = (color.g - color.b) / delta;
+	else if (color.g == maxVal)
+		hue = 2.0f + (color.b - color.r) / delta;
+	else
+		hue = 4.0f + (color.r - color.g) / delta;
+
+	out.h = WrapHue(hue * 60.0f);
+	return out;
+}
+
+/// <summary>
+/// Convert HSL to RGB. Any hue is accepted (it's wrapped), and saturation / lightness are clamped to [0, 1].
+/// </summary>
+RSColor CollectColors::FromHSL(const HSLColor& color) {
+	const float s = Clamp01(color.s);
+	const float l = Clamp01(color.l);
+
+	if (s <= 0.0f)
+		return RSColor(l, l, l);
+
+	const float q = (l < 0.5f) ? l * (1.0f + s) : l + s - l * s;
+	const float p = 2.0f * l - q;
+	const float h = WrapHue(color.h) / 360.0f;
+
+	auto channel = [p, q](float t) {
+		if (t < 0.0f) t += 1.0f;
+		if (t > 1.0f) t -= 1.0f;
+
+		if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
+		if (t < 0.5f) return q;
+		if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
+		return p;
+	};
+
+	return RSColor(channel(h + 1.0f / 3.0f), channel(h), channel(h - 1.0f / 3.0f));
+}
+
+/// <summary>
+/// Move a color from one color scheme to another. "anchor" is the color the pixel was made for, "target" is the color we want instead.
+/// The hue moves by the anchor -> target hue difference, the saturation scales by target / anchor, and the lightness is remapped
+/// so the anchor's lightness lands on the target's (black stays black, white stays white).
+/// When target == anchor the pixel comes back unchanged.
+/// </summary>
+/// <param name="pixel"> - Color to move</param>
+/// <param name="anchor"> - The color scheme the pixel belongs to</param>
+/// <param name="target"> - The color scheme we want the pixel to belong to</param>
+RSColor CollectColors::Recolor(const RSColor& pixel, const RSColor& anchor, const RSColor& target) {
+	const HSLColor p = ToHSL(pixel);
+	const HSLColor a = ToHSL(anchor);
+	const HSLColor t = ToHSL(target);
+
+	HSLColor out;
+	out.h = p.h + (t.h - a.h);
+	out.s = (a.s > 0.0001f) ? p.s * (t.s / a.s) : t.s;
+
+	if (p.l <= a.l)
+		out.l = (a.l > 0.0f) ? p.l * (t.l / a.l) : t.l;
+	else
+		out.l = (a.l < 1.0f) ? t.l + (p.l - a.l) * (1.0f - t.l) / (1.0f - a.l) : t.l;
+
+	return FromHSL(out);
+}
+
+/// <summary>
+/// How different two colors look. Hue only counts as much as both colors are saturated, so greys match on lightness alone.
+/// </summary>
+float CollectColors::ColorDistance(const RSColor& a, const RSColor& b) {
+	const HSLColor x = ToHSL(a);
+	const HSLColor y = ToHSL(b);
+
+	float hueDelta = fabsf(x.h - y.h);
+	if (hueDelta > 180.0f)
+		hueDelta = 360.0f - hueDelta;
+
+	return 2.0f * (hueDelta / 180.0f) * (std::min)(x.s, y.s) + fabsf(x.s - y.s) + fabsf(x.l - y.l);
+}
+
+/// <returns>Index of the candidate closest to target. Ties go to "preferred".</returns>
+size_t CollectColors::NearestColor(const RSColor& target, const ColorList& candidates, size_t preferred) {
+	size_t best = preferred;
+	float bestDistance = ColorDistance(target, candidates[preferred]);
+
+	for (size_t idx = 0; idx < candidates.size(); idx++) {
+		const float distance = ColorDistance(target, candidates[idx]);
+
+		if (distance < bestDistance) {
+			best = idx;
+			bestDistance = distance;
+		}
+	}
+
+	return best;
 }

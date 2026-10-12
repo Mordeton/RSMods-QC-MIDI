@@ -6,48 +6,45 @@ namespace CrowdControl::Effects {
 	/// Test the twitch mod's requirements.
 	/// </summary>
 	/// <param name="request"> - JSON Request</param>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus BigNoteheadEffect::Test(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus BigNoteheadEffect::Test(const Structs::Request&)
 	{
 		LOG_INFO("BigNoteheadEffect::Test()" << std::endl);
 
 		if (!CanStart())
-			return EffectStatus::Retry;
+			return Enums::EffectStatus::Retry;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Start the mod by making noteheads 2.5x the size.
 	/// </summary>
-	/// <returns>EffectStatus::Success if test completed without any issues. EffectStatus::Retry if we have to retry.</returns>
-	EffectStatus BigNoteheadEffect::Start(const Request& request)
+	/// <returns>Enums::EffectStatus::Success if test completed without any issues. Enums::EffectStatus::Retry if we have to retry.</returns>
+	Enums::EffectStatus BigNoteheadEffect::OnStart(const Structs::Request& request)
 	{
 		LOG_INFO("BigNoteheadEffect::Start()" << std::endl);
 
-		if (!CanStart())
-			return EffectStatus::Retry;
-
 		SetNoteHeadScale(2.5);
-	
+
 		SetDuration(request);
 		running = true;
-		
-		return EffectStatus::Success;
+
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>
 	/// Stops the mod.
 	/// </summary>
-	/// <returns>EffectStatus::Success</returns>
-	EffectStatus BigNoteheadEffect::Stop()
+	/// <returns>Enums::EffectStatus::Success</returns>
+	Enums::EffectStatus BigNoteheadEffect::OnStop()
 	{
 		LOG_INFO("BigNoteheadEffect::Stop()" << std::endl);
 
 		SetNoteHeadScale(1);
 		running = false;
 
-		return EffectStatus::Success;
+		return Enums::EffectStatus::Success;
 	}
 
 	/// <summary>

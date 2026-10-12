@@ -6,12 +6,17 @@ namespace CrowdControl::Effects {
 	public:
 		int slot;
 
-		explicit ChangeToToneSlot(int _slot) : slot(_slot){
-			incompatibleEffects = { "shuffletones" };
+		explicit ChangeToToneSlot(int _slot) : slot(_slot) {}
+
+		std::vector<std::string> ClaimsExclusive() const override
+		{
+			return { "tone-slot" };
 		}
 
-		EffectStatus Test(const Request& request) override;
-		EffectStatus Start(const Request& request) override;
-		EffectStatus Stop() override;
+		Enums::EffectStatus Test(const Structs::Request& request) override;
+
+	protected:
+		Enums::EffectStatus OnStart(const Structs::Request& request) override;
+		Enums::EffectStatus OnStop() override;
 	};
 }

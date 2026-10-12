@@ -16,7 +16,7 @@ namespace RSMods
             TooltipDictionary.Add(checkBox_ToggleLoft, "Disables the game background, amps and noise reactive speaker rings.\nBest used with Venue Mode off (setting in game).\nUsed by a lot of Rocksmith Streamers to make it easy to Luma Key out the game background.\nPlayer just sees an all black background when this is enabled.\nOptions for turning the loft off only when in a song, when the game first starts up, or on a key press.");
             TooltipDictionary.Add(checkBox_SongTimer, "Experimental.\nIntent is to show a box with your timestamp position through the song.");
             TooltipDictionary.Add(checkBox_ExtendedRange, "Alters the string and note colors to make it easier to play a 5 string bass or 7 string guitar.");
-            TooltipDictionary.Add(checkBox_ForceEnumeration, "Game will automatically start an Enumeration sequence when a new psarc file is detected as having been added to the dlc folder.\nNot necesary to enable if you're already using Rocksniffer to do the same thing.");
+            TooltipDictionary.Add(checkBox_ForceEnumeration, "Game will automatically start an Enumeration sequence when a new psarc file is detected as having been added to the dlc folder.\nNot necessary to enable if you're already using Rocksniffer to do the same thing.");
             TooltipDictionary.Add(checkBox_RemoveHeadstock, "Stops the Headstock of the guitar being drawn.\n“Headless” guitar mode. Just cleans up some more of the UI.");
             TooltipDictionary.Add(checkBox_RemoveSkyline, "Removes the purple and orange bars from the top of the display in LAS.\nUse in conjunction with No Loft for a cleaner UI.\nOptions for always off, only off when in a song, or only when toggled by key press.");
             TooltipDictionary.Add(checkBox_GreenScreen, "Changes just a section of the game background to all black, amusing for a selective “green screen” stream experience.\nInvalidated by \"No Loft\".");
@@ -29,6 +29,7 @@ namespace RSMods
             TooltipDictionary.Add(checkBox_RainbowStrings, "Experimental.\nHow Pro are you? This makes the players guitar strings constantly cycling through colors.");
             TooltipDictionary.Add(checkBox_RainbowNotes, "Experimental.\nHow Pro are you? This makes all the notes constantly cycle through colors.");
             TooltipDictionary.Add(checkBox_CustomColors, "Lets you define the string / note colors you want.\nSaves a normal set and a Colorblind mode set.");
+            TooltipDictionary.Add(checkBox_UseExactColors, "Off (default): custom string / note colors are shaded the way RSMods always has, which can look lighter / washed out.\nOn: custom colors are shaded the way Rocksmith shades its own colors, so they keep their full color.\nPicking Rocksmith's own colors then looks exactly like the game.");
             TooltipDictionary.Add(checkBox_RemoveLaneMarkers, "Removes the additional lane marker lines seen in the display.\nWhen used with No Loft, provides a cleaner Luma Key.");
             TooltipDictionary.Add(checkBox_ScreenShotScores, "We will automatically take a steam screenshot whenever you finish a song");
             TooltipDictionary.Add(checkBox_RiffRepeaterSpeedAboveOneHundred, "Allow you to play a song faster than 100% speed in Riff Repeater.\nPress keybinding for the speed to go up.\nPress Control + keybinding for the speed to go down.");
@@ -64,8 +65,10 @@ namespace RSMods
             TooltipDictionary.Add(groupBox_OnScreenFont, "If RSMods needs to show text in game, what font should we use?");
             TooltipDictionary.Add(groupBox_AutoLoadProfiles, "If you play with another person, but want to always load into your account this is the place for you.\nThis gets the same benefits of \"Autoload Last Used Profile\" but allows you to pick which profile will always load first");
             TooltipDictionary.Add(listBox_AutoLoadProfiles, "A list of all the profiles you have saved inside of Rocksmith 2014");
-            TooltipDictionary.Add(checkBox_BackupProfile, "Everytime you play Rocksmith there is an extremely small chance your save can get corrupted.\nWhen your save gets corrupted, most of the time you can't recover and need to start anew.\nThis mod will create a backup of your save everytime you open this GUI.");
-            TooltipDictionary.Add(groupBox_Backups, "If you open the RSMods GUI a lot, and are low on disk space, this is the spot for you.\nThis section allows you to set how many backups we store before we start deleting older backups.\nSet this to 0 to allow us to store as many backups as possible.");
+            TooltipDictionary.Add(checkBox_BackupProfile, "Every time you play Rocksmith there is an extremely small chance your save can get corrupted.\nWhen your save gets corrupted, most of the time you can't recover and need to start anew.\nThis mod will create a backup of your save every time you open this GUI,\nand every 10 minutes while Rocksmith is running (only when your save changed).\nBackups go in the Profile_AutoBackups folder: the last hour, 6 hourly, 4 quarter-daily and 30 daily backups are kept.\nFast Profile Load/Save needs this on.");
+            TooltipDictionary.Add(groupBox_ProfileLoadSave, "Settings for how the game loads and saves your profile.");
+            TooltipDictionary.Add(checkBox_FastProfileLoadAndSave, "Big profiles can freeze Rocksmith for minutes when it loads them, and crash it when it saves them.\nThis mod saves and loads the profile in pieces instead, so the game keeps running and doesn't run out of memory.\nBecause it changes how your profile is saved, it needs Backup Profile on, and only runs once your profiles have been backed up.\nThis mod must be enabled when you start the game for it to take effect.");
+            TooltipDictionary.Add(groupBox_Backups, "If you open the RSMods GUI a lot, and are low on disk space, this is the spot for you.\nThis section allows you to set how many backups we store from opening this GUI before we start deleting older backups.\nSet this to 0 to allow us to store as many backups as possible.");
             TooltipDictionary.Add(checkBox_UnlimitedBackups, "If you have an insane amount of disk space, and want to save all your backups, check this box.\nWith this checked, we save every backup when you open RSMods and will never delete them.");
             TooltipDictionary.Add(groupBox_RRSpeed, "Note this interval is what the internal value is set to.\nFor the most control, set the interval to 2.");
             TooltipDictionary.Add(button_SecondaryMonitorStartPos, "PLEASE READ THIS!\nMove this window over to your secondary monitor and make it full screen.\nPress this button when it is full screen so we can save the resolution.\nAfter you press the button you can go back to windowed mode.");
@@ -131,7 +134,7 @@ namespace RSMods
             TooltipDictionary.Add(button_SolidNoteColorRandom, "This will choose a random color for you. \nThe color does not change per activation, what you see here is how it is set for good.");
             TooltipDictionary.Add(button_AddSelectedReward, "Add the configured event trigger.");
             TooltipDictionary.Add(button_RemoveReward, "Remove the selected event trigger.");
-            TooltipDictionary.Add(button_TestTwitchReward, "Manually activate the mod without needing to have recieved a donation.");
+            TooltipDictionary.Add(button_TestTwitchReward, "Manually activate the mod without needing to have received a donation.");
             TooltipDictionary.Add(dgv_DefaultRewards, "Lists the possible events you can use to set a trigger.");
             TooltipDictionary.Add(dgv_EnabledRewards, "Lists the events you have configured - how long they are activated for - and their cost.");
             TooltipDictionary.Add(textBox_TwitchLog, "Shows notifications from Twitch - and what got triggered from these tools.");
@@ -166,7 +169,12 @@ namespace RSMods
             TooltipDictionary.Add(label_ASIO_CustomBufferSize, "The lower this value goes, the lower the latency.\nWhile bringing down the latency, you have a higher chance of crackling audio.\nTry to find the sweet spot.");
             TooltipDictionary.Add(checkBox_ASIO_ASIO, "This is the main reason people use RS_ASIO.\nEnable this if you have an audio interface to potentially lower latency.");
             TooltipDictionary.Add(checkBox_ASIO_WASAPI_Input, "Enable this if you want to play with a USB cable AND your audio interface in multiplayer");
-            TooltipDictionary.Add(checkBox_ASIO_WASAPI_Output, "Enable this if you have headphones that don't go through your audio interface.");
+            TooltipDictionary.Add(checkBox_ASIO_WASAPI_Output,
+                "Use WASAPI for game audio output (tri-state - click to cycle):\n" +
+                "  Unchecked (0) - force WASAPI output OFF\n" +
+                "  Checked (1) - force WASAPI output ON\n" +
+                "  Indeterminate / square (-1) - prompt every boot (RS_ASIO special value)\n" +
+                "Enable ON if you have headphones that don't go through your audio interface.");
             TooltipDictionary.Add(checkBox_ASIO_Output_ControlEndpointVolume, "The EndpointVolume API enables specialized clients to control\nand monitor the volume levels of audio endpoint devices.");
             TooltipDictionary.Add(checkBox_ASIO_Input0_ControlEndpointVolume, "The EndpointVolume API enables specialized clients to control\nand monitor the volume levels of audio endpoint devices.");
             TooltipDictionary.Add(checkBox_ASIO_Input1_ControlEndpointVolume, "The EndpointVolume API enables specialized clients to control\nand monitor the volume levels of audio endpoint devices.");
@@ -186,6 +194,7 @@ namespace RSMods
             TooltipDictionary.Add(checkBox_Rocksmith_DumpAudioLog, "Check this box if you need to send debugging information to Ubisoft.\nIt will create a text file called audiodump.txt, located in the same directory as the Rocksmith application.\nHaving this value on will hurt performance so leave it unchecked for normal gameplay.");
             TooltipDictionary.Add(label_Rocksmith_MaxOutputBuffer, "A few audio devices have been found to have very large output buffers.\nIn this case, the game does its best to choose a reliable audio buffer size.\nHowever, you might find that setting this variable will help to resolve audio issues.\nIn its default setting of 0, it leaves the configuration of this value up to Rocksmith.\nMost audio cards end up using an audio buffer size of 1024.\nFast PCs can usually run with this at 512.\nIf you have disabled Exclusive Mode, you may need to use a higher setting for this.\nWe haven’t run into any specific issues caused by the choice of values for MaxOutputBufferSize, but you may have better luck using multiples of 8 or 32.");
             TooltipDictionary.Add(checkBox_Rocksmith_RTCOnly, "Check this box to only allow official Ubisoft cables to work.\nThis will prevent Rocksmith from hijacking your microphone while you're playing.");
+            TooltipDictionary.Add(checkBox_Rocksmith_RightInputChannel, "Check this box if your guitar is plugged into the second (right) input of a stereo audio interface.\nRocksmith only listens to one input of a stereo device, and normally that's the first (left) one.");
             TooltipDictionary.Add(checkBox_Rocksmith_LowLatencyMode, "Uncheck this box if you’re having trouble getting the game to have good audio performance.\nThis will drop the game back to the original Rocksmith audio settings and may resolve some audio crackling issues at the cost of some of the Rocksmith 2014 latency improvements.");
             TooltipDictionary.Add(checkBox_Rocksmith_GamepadUI, "Check this box to show the controller UI in game.");
             TooltipDictionary.Add(label_Rocksmith_ScreenWidth, "Screen horizontal resolution, in pixels.");
