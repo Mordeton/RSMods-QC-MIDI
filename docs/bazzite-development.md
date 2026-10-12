@@ -101,6 +101,30 @@ on first run. Its upstream updater currently targets upstream RSMods; replacing
 this fork with an upstream release removes the QC extensions, so use development
 artifacts for updates until a fork-aware updater is implemented.
 
+File logging is opt-in. Create an empty `RSMods_debug.txt` in the game directory
+before launching Rocksmith to capture the DLL's version and framework startup.
+
+## Verified local installation
+
+The development artifact built from `3ac3b4135d177afd7ff3ff7dc5f10d8ff289cfe0`
+was installed on 2026-10-12 after both jobs in
+[the development workflow](https://github.com/Mordeton/RSMods-QC-MIDI/actions/runs/38265997232)
+passed. The GUI opened through Proton/Wine Mono. A Steam launch loaded the
+installed DLL and wrote `RSMODS Version: 1.2.8.4-3ac3b413` and
+`[Framework] Registered mod: QCAutomationMod` to the debug log.
+
+The application menu has an **RSMods QC (Proton)** launcher. The exact MIDI name
+`Quad Cortex MIDI 1` is selected in the INI, with QC automation and transpose
+disabled pending hardware tests. The full Windows build passed; the Linux run
+also passed six portable framework suites, QC timeline tests and installer tests.
+GUI startup, DLL loading and WinMM enumeration are verified. Preset recall,
+in-song tone switching, note detection and low-latency ASIO audio remain untested.
+
+Machine-specific paths, hashes, backup location and verification evidence are in
+the ignored `.local/installation.json`, `.local/baseline.json` and
+`.local/RSMods_debug.startup.txt`. Profile backups were saved locally before the
+GUI startup check. Game audio settings and the existing CDLC loader were retained.
+
 For rollback, close the game, restore the files listed as `existed: true` from
 the backup's `files` directory, and remove the installed files listed as
 `existed: false`. Restore the previous per-executable registry override from the
