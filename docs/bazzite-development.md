@@ -1,5 +1,11 @@
 # Bazzite development and Proton setup
 
+**Current setup (2026-10-14):** use [linux-install.md](linux-install.md).
+`codex/linux-release` includes the owner's newer unpublished Windows working
+tree, a verified PipeASIO setup and KDE launchers. Actual game audio and guitar
+tuner response passed. The sections below retain the earlier 2026-10-12 baseline;
+their missing-ASIO and upstream-updater observations have been superseded.
+
 The development target is Rocksmith 2014 Remastered's Windows executable running
 under Steam Proton. RSMods remains a Windows x86 DLL named `xinput1_3.dll`. Its
 WinMM MIDI calls need to reach the Quad Cortex through Wine's MIDI support.

@@ -9,7 +9,9 @@ with a native Linux shared library.
 
 - `origin`: `Mordeton/RSMods-QC-MIDI`; `upstream`: `Lovrom8/RSMods`.
 - QC release source: `feature/qc-public-release-1`, tag `qc-v1.0.0-beta3`.
-- Linux development: `codex/bazzite-development`, integrating upstream `develop`.
+- Linux release: `codex/linux-release`, integrating `codex/bazzite-development`
+  and the owner's newer Windows working tree. Read `docs/linux-install.md` for
+  current setup and evidence; older Bazzite notes are historical.
 - `DLL/Mods/QCAutomationMod.*`: integration with upstream's main-thread framework.
 - `DLL/Mods/QCAutomation.*`: preset classification, bank/program dispatch, transpose scenes.
 - `DLL/Mods/ToneSource*`: live context, authored tone timeline, PSARC/SNG loading.

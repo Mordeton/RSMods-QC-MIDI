@@ -111,6 +111,11 @@ def audio_env(config, connect=True):
     overrides = [p for p in env.get('WINEDLLOVERRIDES', '').split(';')
                  if p and p.split('=', 1)[0].casefold() not in ['xinput1_3', 'avrt']]
     env['WINEDLLOVERRIDES'] = ';'.join(overrides + ['xinput1_3=n,b', 'avrt=n,b'])
+    # Rocksmith uses QC audio/MIDI, never its editor HID interface. Leave it
+    # available to Cortex Control, without disabling other game controllers.
+    ignored = env.get('PROTON_DISABLE_HIDRAW', '')
+    if '0x152a/0x880a' not in ignored.casefold():
+        env['PROTON_DISABLE_HIDRAW'] = ','.join(filter(None, [ignored, '0x152A/0x880A']))
     return env
 
 

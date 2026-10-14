@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows.Forms;
 using System.IO;
 using System.Linq;
@@ -60,7 +60,6 @@ namespace RSMods
         TabPage ProfileEditsTab;
         int ProfileEditsTabIndex;
 
-        string github_UpdateResponse;
 
         bool AllowSaving = false;
         bool qcaTargetTextChangeSuppressed = false;
@@ -176,7 +175,6 @@ namespace RSMods
             Startup_ListAllBackups();
 
             // Check For Updates
-            CheckForUpdates_CallGithubAPI();
 
             // Should we show the Update button?
             Startup_ShowUpdateButton();
@@ -5462,69 +5460,6 @@ namespace RSMods
 
         #endregion
         #region Check For Updates
-        private async void CheckForUpdates_CallGithubAPI()
-        {
-            try
-            {
-                // Setup HTTP Client
-                string latestRelease_API = "https://api.github.com/repos/Mordeton/RSMods-QC-MIDI/releases/latest";
-                HttpClient client = new HttpClient();
-
-                // Github API won't let us through without a User-Agent.
-                client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("RSMods", Application.ProductVersion));
-
-                // Read latest release from Github API.
-                HttpResponseMessage response = client.GetAsync(latestRelease_API).Result;
-
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                if (jsonResponse.Contains("limit exceeded"))
-                {
-                    github_UpdateResponse = "null";
-                    return;
-                }
-
-                github_UpdateResponse = jsonResponse;
-            }
-            catch
-            {
-                github_UpdateResponse = "null"; // User doesn't have a stable internet connection.
-            }
-        }
-
-        private bool CheckForUpdates_IsUpdateAvailable()
-        {
-            string jsonResponse = github_UpdateResponse;
-
-            // Couldn't connect to Github API.
-            if (jsonResponse == "null")
-                return false;
-
-            // Get Version Number From Github API.
-            try
-            {
-                string github_versionNumber = JToken.Parse(jsonResponse).SelectToken("name").ToString().Replace("RSModsInstaller-v", "");
-
-                // Return true if an update is available, and false if it isn't.
-                return github_versionNumber != Application.ProductVersion;
-            }
-            catch // Unable to check for updates.
-            {
-                return false;
-            }
-        }
-
-        private string CheckForUpdates_GetPatchNotes()
-        {
-            string jsonResponse = github_UpdateResponse;
-
-            // Couldn't connect to Github API.
-            if (jsonResponse == "null")
-                return "";
-
-            return JToken.Parse(jsonResponse).SelectToken("body").ToString();
-        }
-
         // Fork releases contain platform-specific assets. Never run upstream's
         // first release asset over the user's QC fork or Proton installation.
         private void CheckForUpdates_GetInstaller()
