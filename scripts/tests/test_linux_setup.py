@@ -2,6 +2,8 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
+import tempfile
 
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -47,6 +49,45 @@ class SteamOptionsTests(unittest.TestCase):
     def test_duplicate_key_refused(self):
         with self.assertRaises(ValueError):
             steam_options.get_options(self.fixture('"LaunchOptions" "a" "LaunchOptions" "b"'))
+
+
+class HidConfigurationTests(unittest.TestCase):
+    def registry(self, value):
+        return (r'[System\\ControlSet001\\Services\\winebus] 123' + '\n' +
+                ('' if value is None else f'"DisableHidraw"=dword:{value:08x}\n') +
+                '[Unrelated]\n"DisableHidraw"=dword:00000009\n')
+
+    def test_reads_only_winebus_value(self):
+        self.assertIsNone(linux_setup.hidraw_setting(self.registry(None)))
+        self.assertEqual(linux_setup.hidraw_setting(self.registry(1)), 1)
+        self.assertEqual(linux_setup.hidraw_setting(self.registry(0)), 0)
+
+    def test_reconfigure_preserves_original_and_restore_removes_new_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = Path(tmp) / 'system.reg'
+            registry.write_text(self.registry(None))
+            config = {'prefix': tmp}
+
+            def run(command, **kwargs):
+                value = int(command[-1]) if command[2] == 'add' else None
+                registry.write_text(self.registry(value))
+
+            with patch.object(linux_setup.linux, 'running_game', return_value=False), \
+                 patch.object(linux_setup, 'save'), \
+                 patch.object(linux_setup, 'runner_env', return_value={}), \
+                 patch.object(linux_setup.subprocess, 'run', side_effect=run):
+                linux_setup.configure_hid(config, Path(tmp) / 'test.log')
+                linux_setup.configure_hid(config, Path(tmp) / 'test.log')
+                self.assertIsNone(config['hidraw_previous'])
+                self.assertEqual(linux_setup.hidraw_setting(registry.read_text()), 1)
+                linux_setup.configure_hid(config, Path(tmp) / 'test.log', restore=True)
+                self.assertIsNone(linux_setup.hidraw_setting(registry.read_text()))
+                self.assertFalse(config['hidraw_disabled'])
+
+    def test_refuses_running_game(self):
+        with patch.object(linux_setup.linux, 'running_game', return_value=True):
+            with self.assertRaises(ValueError):
+                linux_setup.configure_hid({}, Path('/unused'))
 
 
 if __name__ == '__main__':

@@ -39,3 +39,11 @@ $minizObj = Join-Path $outputPath 'miniz.obj'
 if ($LASTEXITCODE -ne 0) { throw 'QC asset harness compilation failed.' }
 & $assetExe
 if ($LASTEXITCODE -ne 0) { throw 'QC asset regression checks failed.' }
+
+$timerSource = Join-Path $PSScriptRoot 'SongTimerRegression.cpp'
+$timerExe = Join-Path $outputPath 'song-timer.exe'
+$timerObj = Join-Path $outputPath 'song-timer.obj'
+& cmd.exe /d /c "`"$vcvars`" >nul && cl /nologo /std:c++20 /EHsc /W3 `"$timerSource`" /Fe`"$timerExe`" /Fo`"$timerObj`""
+if ($LASTEXITCODE -ne 0) { throw 'Song timer regression compilation failed.' }
+& $timerExe
+if ($LASTEXITCODE -ne 0) { throw 'Song timer regression checks failed.' }

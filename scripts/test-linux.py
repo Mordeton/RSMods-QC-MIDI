@@ -28,3 +28,7 @@ with tempfile.TemporaryDirectory(prefix="rsmods-tests-") as tmp:
                     str(root / "scripts/tests/ToneSourceTimelineTests.cpp"),
                     str(root / "DLL/Mods/ToneSourceTimeline.cpp"), "-o", exe], check=True)
     subprocess.run([exe], check=True)
+    exe = str(Path(tmp) / "SongTimerRegression")
+    subprocess.run([os.environ.get("CXX", "g++"), "-std=c++20",
+                    str(root / "tests/SongTimerRegression.cpp"), "-o", exe], check=True)
+    subprocess.run([exe], check=True)

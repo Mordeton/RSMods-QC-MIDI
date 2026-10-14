@@ -111,11 +111,6 @@ def audio_env(config, connect=True):
     overrides = [p for p in env.get('WINEDLLOVERRIDES', '').split(';')
                  if p and p.split('=', 1)[0].casefold() not in ['xinput1_3', 'avrt']]
     env['WINEDLLOVERRIDES'] = ';'.join(overrides + ['xinput1_3=n,b', 'avrt=n,b'])
-    # Rocksmith uses QC audio/MIDI, never its editor HID interface. Leave it
-    # available to Cortex Control, without disabling other game controllers.
-    ignored = env.get('PROTON_DISABLE_HIDRAW', '')
-    if '0x152a/0x880a' not in ignored.casefold():
-        env['PROTON_DISABLE_HIDRAW'] = ','.join(filter(None, [ignored, '0x152A/0x880A']))
     return env
 
 
@@ -124,6 +119,41 @@ def runner_env(config):
     env.update(WINEPREFIX=config['prefix'], PROTONPATH=config['proton'], GAMEID='umu-221680',
                STORE='steam', STEAM_COMPAT_INSTALL_PATH=config['game'], WINEDEBUG='-all,err+all')
     return env
+
+
+def hidraw_setting(registry):
+    block = ''
+    active = False
+    for line in registry.splitlines():
+        if line.startswith('['):
+            active = line.casefold().startswith('[system\\\\controlset001\\\\services\\\\winebus]')
+        elif active:
+            block += line + '\n'
+    value = re.search(r'^"DisableHidraw"=dword:([0-9a-f]{8})$', block, re.I | re.M)
+    return int(value[1], 16) if value else None
+
+
+def configure_hid(config, log_path, restore=False):
+    if linux.running_game():
+        raise ValueError('Close Rocksmith and RSMods before changing the prefix HID setting.')
+    key = r'HKLM\System\CurrentControlSet\Services\winebus'
+    if restore:
+        if 'hidraw_previous' not in config:
+            raise ValueError('No previous HID setting was recorded.')
+        value = config['hidraw_previous']
+    else:
+        config.setdefault('hidraw_previous', hidraw_setting((Path(config['prefix']) / 'system.reg').read_text()))
+        save(config)
+        value = 1
+    command = ['umu-run', 'reg', 'delete' if value is None else 'add', key, '/v', 'DisableHidraw', '/f']
+    if value is not None:
+        command += ['/t', 'REG_DWORD', '/d', str(value)]
+    with log_path.open('w') as log:
+        subprocess.run(command, env=runner_env(config), stdout=log, stderr=subprocess.STDOUT, check=True, timeout=90)
+    if hidraw_setting((Path(config['prefix']) / 'system.reg').read_text()) != value:
+        raise ValueError('Prefix HID setting verification failed')
+    config['hidraw_disabled'] = not restore
+    save(config)
 
 
 def payload():
@@ -244,6 +274,7 @@ def configure(args):
     checked = json.loads(result.read_text())
     if not all(checked.get(k) for k in ['registered', 'unixlib', 'pipewire']):
         raise ValueError('PipeASIO did not pass the actual-prefix runtime check')
+    configure_hid(config, backup / 'hid-config.log')
     config.setdefault('audio_backups', []).append(str(backup))
     if not config.get('original_audio_backup'):
         config['original_audio_backup'] = str(backup)
@@ -327,8 +358,11 @@ def wrap(command):
     env = audio_env(config)
     logs = APP / 'logs'
     logs.mkdir(exist_ok=True)
-    if os.environ.get('RSMODS_QC_DEBUG') == '1':
-        env.update(PROTON_LOG='1', PROTON_LOG_DIR=str(logs))
+    if config.get('debug', False) or os.environ.get('RSMODS_QC_DEBUG') == '1':
+        env.update(PROTON_LOG='1', PROTON_LOG_DIR=str(logs), WINEDEBUG='+timestamp,+pid,+tid,+seh')
+    with (logs / 'launcher.log').open('w') as log:
+        os.dup2(log.fileno(), 1)
+        os.dup2(log.fileno(), 2)
     os.execvpe(command[0], command, env)
 
 
@@ -363,9 +397,11 @@ def main():
     update.add_argument('--sha256', required=True)
     undo = subs.add_parser('rollback', help='Restore a verified mod backup while retaining settings')
     undo.add_argument('--backup', required=True)
+    debug = subs.add_parser('debug', help='Enable focused Wine exception logging for the next game launches')
+    debug.add_argument('mode', choices=['on', 'off'])
     session = subs.add_parser('wrap')
     session.add_argument('command', nargs=argparse.REMAINDER)
-    for name in ['play', 'gui', 'doctor', 'restore-audio', 'desktop-install']:
+    for name in ['play', 'gui', 'doctor', 'restore-audio', 'restore-hid', 'desktop-install']:
         subs.add_parser(name)
     args = parser.parse_args()
     try:
@@ -386,6 +422,12 @@ def main():
             wrap(args.command)
         elif args.action == 'restore-audio':
             restore_audio()
+        elif args.action == 'restore-hid':
+            configure_hid(load(), APP / 'hid-restore.log', restore=True)
+        elif args.action == 'debug':
+            config = load()
+            config['debug'] = args.mode == 'on'
+            save(config)
         else:
             config = load()
             if args.action == 'play':

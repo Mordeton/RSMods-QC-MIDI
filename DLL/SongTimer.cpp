@@ -1,34 +1,18 @@
 #include "stdafx.h"
 #include "SongTimer.hpp"
+#include "SongTimerRead.hpp"
 
 float SongTimer::SongTimer() {
 	if (GameState::Menus::IsInPreSongTuner()) {
 		return 0.f;
 	}
 
-	uintptr_t addrTimerBase = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_timer, Offsets::ptr_timerBaseOffsets);
-	uintptr_t addrTimerRare = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_timerRare, Offsets::ptr_timerRareOffsets, true);
-
-	if (!addrTimerBase) {
-		LOG_ERROR("Invalid Pointer: (BASE) ShowSongTimer" << std::endl);
-		return 0.f;
-	}
-
-	// At this point, we can verify that the timer is a valid time.
-	if (!addrTimerRare) {
-		LOG_ERROR("Invalid Pointer: (RARE) ShowSongTimer" << std::endl);
-		return *(float*)addrTimerBase;
-	}
-
-	// We entered a song where the base timer does not work.
-	// Cause for this is unknown but we need to check, or time based mods (looping, song timer) will break.
-	// Ex: Desolate Motion, or Rocksmith 2012 Theme.
-	if (GameState::Menus::IsInSongModes() && *(float*)addrTimerBase == 0.f && *(float*)addrTimerRare != 0.f) {
-		return *(float*)addrTimerRare;
-	}
-	else {
-		return *(float*)addrTimerBase; 	// This is the default case, and will be used 99.99% of the time.
-	}
+	// Preserve the rare-timer fallback for songs such as Desolate Motion, but
+	// never dereference a pointer obtained before another unchecked read.
+	return Detail::ReadSongTime(GameState::Menus::IsInSongModes(),
+		Offsets::baseHandle + Offsets::ptr_timer, Offsets::ptr_timerBaseOffsets,
+		Offsets::baseHandle + Offsets::ptr_timerRare, Offsets::ptr_timerRareOffsets,
+		[](uintptr_t address, auto& value) { return MemUtil::TryRead(address, value); });
 }
 
 /// <summary>

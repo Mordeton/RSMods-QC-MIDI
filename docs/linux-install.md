@@ -16,7 +16,14 @@ On the owner's Bazzite/KDE machine, native Steam with Proton Experimental
 - RSASIO streams at 48 kHz, with two output/eight input channels and 256 frames.
   This is the configured buffer, not a measured end-to-end latency claim.
 - The game uses PipeASIO's experimental 32-bit frontend with Proton's new WoW64.
-- Sustained song play, the new F10 panel, automated recalls/transpose, reconnect,
+- The new F10 panel appeared, and an idle MIDI recall to the configured QC preset
+  was observed in Cortex Control. This does not verify in-song automation yet.
+- A crash just after tuning was traced to an unchecked song-timer float read
+  inside RSMods (RVA `0xA7C3C` in build `d43e35b`). The CDLC loader was present
+  and applied its startup patches. The timer now guards intermediate and final
+  reads, returns zero when unavailable and reads fresh values on the next call.
+  Song playback with that fix still needs actual game verification.
+- Sustained song play, the full F10 workflow, automated recalls/transpose, reconnect,
   reboot and other Proton versions still need their own runtime checks.
 
 Original Cortex Control is a separate private compatibility installation. It is
@@ -55,6 +62,16 @@ verified for the owner's current dry Input 1 route. A pitch-shifted detection
 feed on QC USB 3 requires channel `2`, after verifying that preset's routing.
 Raw input does not prove transpose detection. Keep the QC's modelled guitar
 monitoring direct to headphones and avoid a second guitar monitor in Rocksmith.
+The owner's current presets route the clean signal through Transpose to **USB 5**;
+the installed game therefore uses `--input-channel 4`. This route was visually
+checked in Cortex Control; the earlier owner-confirmed tuner test used raw USB 1.
+
+Audio setup sets `DisableHidraw=1` only in Rocksmith's Wine prefix, recording its
+previous value for restoration. This prevents Wine's HID backend from opening
+the QC editor interface while Cortex Control is running. Linux USB audio/MIDI
+drivers remain attached. Raw-HID game-controller features in this prefix are not
+qualified. A per-device `PROTON_DISABLE_HIDRAW` filter was insufficient because
+the backend still opened the node; it is no longer used by this setup.
 
 ## Update, diagnostics and rollback
 
@@ -63,6 +80,7 @@ monitoring direct to headphones and avoid a second guitar monitor in Rocksmith.
 ~/.local/bin/rsmods-qc doctor
 ~/.local/bin/rsmods-qc rollback --backup /absolute/path/printed/by/install
 ~/.local/bin/rsmods-qc restore-audio
+~/.local/bin/rsmods-qc restore-hid
 ~/.local/bin/rsmods-qc restore-steam-options --close-steam
 ```
 
@@ -84,9 +102,11 @@ menu entries after restoring launch options, remove `rocksmith-qc.desktop` and
 desktop file is retained as `rsmods-qc-proton.desktop.before` in the tools folder.
 Personal game files and backups should remain in place.
 
-Ordinary launches do not enable large Proton traces. For a diagnostic launch,
-use `RSMODS_QC_DEBUG=1` before the session wrapper in Steam's launch options;
-logs go to `~/.local/share/rsmods-qc/logs`. Never upload personal logs or saves.
+Ordinary launches do not enable Proton traces. Use `rsmods-qc debug on` to enable
+focused exception logging for subsequent launches, then `rsmods-qc debug off`
+after the check. Logs go to `~/.local/share/rsmods-qc/logs`; copy a useful trace
+before relaunching because the next run overwrites it. Never upload personal
+logs or saves. CI retains matching debug symbols as a separate artifact.
 
 ## Smallest remaining acceptance sequence
 
