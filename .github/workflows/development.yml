@@ -29,19 +29,21 @@ jobs:
       - name: Run current QC production regression checks
         shell: pwsh
         run: ./tests/run-qc-regression.ps1
-      - name: Build development package
-        shell: pwsh
-        run: ./build-rsmods-deliverable.ps1 -VersionTag "linux-dev-${{ github.sha }}"
       - name: Check GUI and runtime override fixture parity
         shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'qc-gui-check'
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item GUI/Lib/Newtonsoft.Json.dll $out
-          & "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe" /nologo /target:exe "/out:$out\QCOverridesRegression.exe" /r:GUI\Lib\Newtonsoft.Json.dll .\GUI\QCOverrides.cs .\tests\QCOverridesRegression.cs
+          $compiler = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products '*' -find 'MSBuild\**\Bin\Roslyn\csc.exe' | Select-Object -First 1
+          if (-not $compiler) { throw 'Visual Studio C# compiler not found' }
+          & $compiler /nologo /target:exe "/out:$out\QCOverridesRegression.exe" /r:GUI\Lib\Newtonsoft.Json.dll .\GUI\QCOverrides.cs .\tests\QCOverridesRegression.cs
           if ($LASTEXITCODE -ne 0) { throw 'GUI fixture build failed' }
           & "$out/QCOverridesRegression.exe" tests/qc-overrides-fixtures.json
           if ($LASTEXITCODE -ne 0) { throw 'GUI fixture checks failed' }
+      - name: Build development package
+        shell: pwsh
+        run: ./build-rsmods-deliverable.ps1 -VersionTag "linux-dev-${{ github.sha }}"
       - uses: actions/upload-artifact@v4
         with:
           name: rsmods-qc-development

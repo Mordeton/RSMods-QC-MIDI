@@ -1,4 +1,6 @@
 import importlib.util
+import argparse
+import hashlib
 import io
 from pathlib import Path
 import tempfile
@@ -48,3 +50,28 @@ class PortableArchiveTests(unittest.TestCase):
             (game / "Rocksmith2014.exe").touch()
             with patch.object(linux, "steam_roots", return_value=[root]):
                 self.assertEqual(linux.find_game(), game)
+
+    def test_install_and_verified_rollback_preserve_personal_settings(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(linux, 'running_game', return_value=False):
+            root = Path(tmp)
+            game = root / 'game'
+            (game / 'RSMods').mkdir(parents=True)
+            (game / 'xinput1_3.dll').write_bytes(b'old dll')
+            (game / 'RSMods/GUI_Settings.ini').write_bytes(b'personal settings')
+            (game / 'RSMods/QCOverrides.json').write_bytes(b'personal mappings')
+            archive = root / 'update.zip'
+            with zipfile.ZipFile(archive, 'w') as z:
+                for name in ['xinput1_3.dll', 'RSMods/RSMods.exe', 'RSMods/GUI_Settings.ini', 'RSMods/QCOverrides.json']:
+                    z.writestr('bundle/' + name, b'new binary or default')
+            args = argparse.Namespace(archive=archive, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+            backup = linux.install(args, game)
+            self.assertEqual((game / 'RSMods/GUI_Settings.ini').read_bytes(), b'personal settings')
+            self.assertEqual((game / 'RSMods/QCOverrides.json').read_bytes(), b'personal mappings')
+            (game / 'xinput1_3.dll').write_bytes(b'newer user change')
+            with self.assertRaises(ValueError):
+                linux.rollback(backup, game)
+            self.assertTrue((game / 'RSMods/RSMods.exe').exists())
+            (game / 'xinput1_3.dll').write_bytes(b'new binary or default')
+            linux.rollback(backup, game)
+            self.assertEqual((game / 'xinput1_3.dll').read_bytes(), b'old dll')
+            self.assertFalse((game / 'RSMods/RSMods.exe').exists())
