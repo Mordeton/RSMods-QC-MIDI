@@ -177,10 +177,12 @@ int main(int argc, char** argv) {
         QCAutomation::ToneSource::metadataArrangement = "rhythm";
         QCAutomation::ToneSource::metadataTuning.fill(-1); Tick();
         Check(lastSentSceneValue == 1, "fresh metadata did not recover scene B");
-        Reset(); SongTuning::available = false;
-        QCAutomation::ToneSource::metadataAvailable = true;
-        QCAutomation::ToneSource::metadataTuning.fill(255); Tick();
-        Check(!activeSongSceneValue && Count(43) == 0, "out-of-range metadata wrapped to valid tuning");
+        for (int invalid : {25, 127, 255, -25, -129}) {
+            Reset(); SongTuning::available = false;
+            QCAutomation::ToneSource::metadataAvailable = true;
+            QCAutomation::ToneSource::metadataTuning.fill(invalid); Tick();
+            Check(!activeSongSceneValue && Count(43) == 0, "out-of-range metadata accepted as tuning");
+        }
         Reset(); QCAutomation::ToneSource::metadataAvailable = true;
         QCAutomation::ToneSource::metadataTuning.fill(-1); Tick();
         Check(lastSentSceneValue == 0, "metadata overrode available live E-standard tuning");

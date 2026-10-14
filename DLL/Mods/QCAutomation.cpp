@@ -749,14 +749,20 @@ namespace {
 			if (!GameState::TryGetCurrentArrangementID(freshArrangement) ||
 				!QCAutomation::ToneSource::TryGetArrangementTuning(
 				GameState::GetSongKey(), freshArrangement, metadata) ||
-				std::any_of(metadata.begin(), metadata.end(), [](int value) { return value < -128 || value > 127; })) {
+				std::any_of(metadata.begin(), metadata.end(), [](int value) { return value < -24 || value > 24; })) {
 				decision.result = SongTransposeResult::Retry;
 				decision.detail = "tuning not available yet";
 				return decision;
 			}
-			std::transform(metadata.begin(), metadata.end(), tuningSnapshot.begin(),
-				[](int value) { return static_cast<byte>(value); });
 			LOG_INFO(kLogPrefix << "transpose tuning source=matched_arrangement_metadata" << std::endl);
+			// Metadata already contains signed semitones. Resolve it directly,
+			// without re-entering legacy byte decoding or the live pitch pointer.
+			const int strings = Settings::ReturnSettingValue("ExtendedRangeFixBassTuning") == "on" &&
+				(metadata[4] == 0 || metadata[4] == 12) && (metadata[5] == 0 || metadata[5] == 12) ? 4 : 6;
+			const auto bounds = std::minmax_element(metadata.begin(), metadata.begin() + strings);
+			bool strictDrop = metadata[0] + 2 == metadata[1];
+			for (int i = 2; i < strings; ++i) strictDrop = strictDrop && metadata[i] == metadata[1];
+			return DecideTranspose({*bounds.second, *bounds.first}, strictDrop);
 		}
 
 		const Tuning tuning(

@@ -28,7 +28,7 @@ On the owner's Bazzite/KDE machine, native Steam with Proton Experimental
   alternate timer. The guarded reader now also tries the alternate when the
   base is unavailable during a song. QC transpose can use the exact playing
   arrangement's retained tuning metadata if live tuning memory is unavailable;
-  it rejects stale identities and values outside the signed-byte range. These
+  it requires a fresh matching identity and six offsets within ±24 semitones. These
   follow-up corrections still need game verification with transpose enabled.
 - Sustained song play, the full F10 workflow, automated recalls/transpose, reconnect,
   reboot and other Proton versions still need their own runtime checks.
