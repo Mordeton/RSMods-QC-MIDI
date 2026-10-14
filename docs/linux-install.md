@@ -22,7 +22,14 @@ On the owner's Bazzite/KDE machine, native Steam with Proton Experimental
   inside RSMods (RVA `0xA7C3C` in build `d43e35b`). The CDLC loader was present
   and applied its startup patches. The timer now guards intermediate and final
   reads, returns zero when unavailable and reads fresh values on the next call.
-  Song playback with that fix still needs actual game verification.
+  The owner confirmed Supersonic CDLC song playback, headphone audio and note
+  detection with build `c2f3a74`; the later test used the clean USB 5 route.
+- That run exposed an inaccessible base timer alongside an advancing readable
+  alternate timer. The guarded reader now also tries the alternate when the
+  base is unavailable during a song. QC transpose can use the exact playing
+  arrangement's retained tuning metadata if live tuning memory is unavailable;
+  it rejects stale identities and values outside the signed-byte range. These
+  follow-up corrections still need game verification with transpose enabled.
 - Sustained song play, the full F10 workflow, automated recalls/transpose, reconnect,
   reboot and other Proton versions still need their own runtime checks.
 
@@ -64,7 +71,15 @@ Raw input does not prove transpose detection. Keep the QC's modelled guitar
 monitoring direct to headphones and avoid a second guitar monitor in Rocksmith.
 The owner's current presets route the clean signal through Transpose to **USB 5**;
 the installed game therefore uses `--input-channel 4`. This route was visually
-checked in Cortex Control; the earlier owner-confirmed tuner test used raw USB 1.
+checked in Cortex Control and the owner confirmed in-song note detection. The
+earlier tuner test used raw USB 1. Transpose accuracy remains a separate test.
+
+Song-specific mappings live in `Rocksmith2014/RSMods/QCOverrides.json`; copying
+source code alone does not migrate them from Windows. Preserve/import the user's
+actual file when available. Tone names such as a song title may hit the Clean
+fallback, so use the F10 arrangement mapping for those tones. Do not change the
+global classifier merely to fix one song. Keep spaces around ` = ` in RSMods.ini:
+the existing settings GUI recognizes those exact identifiers.
 
 Audio setup sets `DisableHidraw=1` only in Rocksmith's Wine prefix, recording its
 previous value for restoration. This prevents Wine's HID backend from opening

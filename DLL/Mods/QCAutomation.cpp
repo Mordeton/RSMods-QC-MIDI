@@ -744,9 +744,19 @@ namespace {
 
 		std::array<byte, 6> tuningSnapshot{};
 		if (!SongTuning::TryGetCurrentTuning(tuningSnapshot)) {
-			decision.result = SongTransposeResult::Retry;
-			decision.detail = "tuning not available yet";
-			return decision;
+			std::array<int, 6> metadata{};
+			std::string freshArrangement;
+			if (!GameState::TryGetCurrentArrangementID(freshArrangement) ||
+				!QCAutomation::ToneSource::TryGetArrangementTuning(
+				GameState::GetSongKey(), freshArrangement, metadata) ||
+				std::any_of(metadata.begin(), metadata.end(), [](int value) { return value < -128 || value > 127; })) {
+				decision.result = SongTransposeResult::Retry;
+				decision.detail = "tuning not available yet";
+				return decision;
+			}
+			std::transform(metadata.begin(), metadata.end(), tuningSnapshot.begin(),
+				[](int value) { return static_cast<byte>(value); });
+			LOG_INFO(kLogPrefix << "transpose tuning source=matched_arrangement_metadata" << std::endl);
 		}
 
 		const Tuning tuning(

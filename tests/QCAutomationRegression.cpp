@@ -16,9 +16,14 @@ void Reset() {
         {"QCAutomationDevice", "QC"}, {"QCAutomationMidiChannel", "0"},
         {"QCAutomationSceneCC", "43"}, {"QCAutomationIdleScene", "A"}};
     SongTuning::available = true; SongTuning::tuning = {};
+    QCAutomation::ToneSource::metadataAvailable = false;
+    QCAutomation::ToneSource::metadataSong = "test-song";
+    QCAutomation::ToneSource::metadataArrangement = "lead";
+    QCAutomation::ToneSource::metadataTuning = {};
     Midi::available = true; Midi::failScene = false; Midi::failPreset = false;
     Midi::messages.clear(); SongTimer::time = 10;
     GameState::song = "test-song"; GameState::arrangement = "lead";
+    GameState::arrangementAvailable = true;
     QCAutomation::ToneSource::manualSlot = 0; QCAutomation::ToneSource::tone = "clean";
 }
 int Count(int controller) {
@@ -159,6 +164,26 @@ int main(int argc, char** argv) {
         Check(!activeSongSceneValue && Count(43) == 0, "invalid tuning sent scene");
         SongTuning::available = true; Tick();
         Check(lastSentSceneValue == 0, "available E standard not retried");
+
+        Reset(); SongTuning::available = false; Tick();
+        QCAutomation::ToneSource::metadataAvailable = true;
+        GameState::arrangementAvailable = false; Tick();
+        Check(!activeSongSceneValue && Count(43) == 0, "cached identity accepted while fresh identity unavailable");
+        GameState::arrangementAvailable = true; Tick();
+        Check(lastSentSceneValue == 0, "matched E-standard metadata did not resolve scene A");
+        Steady();
+        GameState::arrangement = "rhythm"; Tick();
+        Check(!activeSongSceneValue, "previous arrangement tuning leaked across transition");
+        QCAutomation::ToneSource::metadataArrangement = "rhythm";
+        QCAutomation::ToneSource::metadataTuning.fill(-1); Tick();
+        Check(lastSentSceneValue == 1, "fresh metadata did not recover scene B");
+        Reset(); SongTuning::available = false;
+        QCAutomation::ToneSource::metadataAvailable = true;
+        QCAutomation::ToneSource::metadataTuning.fill(255); Tick();
+        Check(!activeSongSceneValue && Count(43) == 0, "out-of-range metadata wrapped to valid tuning");
+        Reset(); QCAutomation::ToneSource::metadataAvailable = true;
+        QCAutomation::ToneSource::metadataTuning.fill(-1); Tick();
+        Check(lastSentSceneValue == 0, "metadata overrode available live E-standard tuning");
 
         Reset(); Settings::values["QCAutomationTransposeEnabled"] = "off"; Tick();
         Check(Count(43) == 0, "disabled transpose sent scene");

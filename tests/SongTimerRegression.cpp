@@ -32,17 +32,21 @@ int main() {
         };
         Check(time() == 12.f, "base timer lost");
         pointers.erase(0x100);
-        Check(time() == 0.f, "unreadable root reused previous song time");
+        Check(time() == 42.f, "unreadable base root lost valid rare timer");
+        Check(time(false) == 0.f, "unreadable root reused previous song time outside song");
         pointers[0x100] = 0x200;
         pointers.erase(0x210);
-        Check(time() == 0.f, "unreadable intermediate pointer accepted");
+        Check(time() == 42.f, "unreadable intermediate pointer blocked rare timer");
         // Actual crash: valid chain reads leave an unreadable final float.
         pointers[0x210] = 0x24748ae8;
-        Check(time() == 0.f, "invalid final timer accepted");
+        Check(time() == 42.f, "unreadable final float blocked valid rare timer");
+        values[0x620] = 43.f;
+        Check(time() == 43.f, "rare timer did not advance while base was unavailable");
         pointers[0x210] = 0;
-        Check(time() == 0.f, "null intermediate pointer accepted");
+        Check(time() == 43.f, "null intermediate pointer blocked rare timer");
         pointers[0x210] = (std::numeric_limits<uintptr_t>::max)();
-        Check(time() == 0.f, "offset overflow accepted");
+        Check(time() == 43.f, "base offset overflow blocked rare timer");
+        values[0x620] = 42.f;
         pointers[0x210] = 0x300;
         values[0x320] = 13.f;
         Check(time() == 13.f, "fresh timer did not recover after loading");

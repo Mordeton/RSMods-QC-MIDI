@@ -30,13 +30,11 @@ float ReadSongTime(bool inSong, uintptr_t base,
     std::span<const unsigned int> baseOffsets, uintptr_t rare,
     std::span<const unsigned int> rareOffsets, Reader read) {
     const auto baseTime = ReadTimer(base, baseOffsets, read);
-    if (!baseTime)
-        return 0.f; // No cached value from a previous song/seek.
-    if (inSong && *baseTime == 0.f) {
+    if (inSong && (!baseTime || *baseTime == 0.f)) {
         const auto rareTime = ReadTimer(rare, rareOffsets, read);
         if (rareTime)
             return *rareTime;
     }
-    return *baseTime;
+    return baseTime.value_or(0.f); // No cached value from a previous song/seek.
 }
 }

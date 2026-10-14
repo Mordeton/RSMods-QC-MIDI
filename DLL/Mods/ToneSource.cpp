@@ -34,6 +34,7 @@ namespace {
 		std::string currentArrangementHash_;
 		bool hasActiveTimeline_ = false;
 		ArrangementToneTimeline activeTimeline_;
+		std::optional<std::array<int, 6>> activeTuning_;
 
 		std::optional<std::string> currentBaselineAuthoredToneName_;
 		std::optional<std::string> lastLoggedBaselineAuthoredToneName_;
@@ -177,6 +178,7 @@ namespace {
 		runtimeState.currentArrangementHash_.clear();
 		runtimeState.hasActiveTimeline_ = false;
 		runtimeState.activeTimeline_ = {};
+		runtimeState.activeTuning_.reset();
 
 		runtimeState.currentBaselineAuthoredToneName_.reset();
 		runtimeState.lastLoggedBaselineAuthoredToneName_.reset();
@@ -203,6 +205,16 @@ namespace {
 }
 
 namespace QCAutomation::ToneSource {
+    bool TryGetArrangementTuning(const std::string& expectedSong,
+        const std::string& expectedRuntimeId, std::array<int, 6>& tuning) {
+        std::lock_guard<std::mutex> lock(toneSourceMutex);
+        if (!runtimeState.monitoringCurrentSong_ || expectedSong.empty() || expectedRuntimeId.empty() ||
+            runtimeState.currentSongKey_ != expectedSong ||
+            runtimeState.currentArrangementHash_ != expectedRuntimeId || !runtimeState.activeTuning_)
+            return false;
+        tuning = *runtimeState.activeTuning_;
+        return true;
+    }
     bool GetActiveIdentity(std::string& song, std::string& arrangement, const std::string& expectedRuntimeId) {
         std::lock_guard<std::mutex> lock(toneSourceMutex);
         if (!runtimeState.monitoringCurrentSong_ || !runtimeState.hasActiveTimeline_ || runtimeState.currentArrangementHash_ != expectedRuntimeId) return false;
@@ -341,6 +353,7 @@ namespace QCAutomation::ToneSource {
 				runtimeState.currentArrangementHash_ = arrangementHash;
 				runtimeState.hasActiveTimeline_ = false;
 				runtimeState.activeTimeline_ = {};
+				runtimeState.activeTuning_.reset();
 
 				runtimeState.currentBaselineAuthoredToneName_.reset();
 				runtimeState.lastLoggedBaselineAuthoredToneName_.reset();
@@ -406,6 +419,9 @@ namespace QCAutomation::ToneSource {
 						infoLogs.clear();
 					}
 					else {
+					if (pendingLoadResult.descriptorResolved && pendingLoadResult.descriptor.tuningAvailable) {
+						runtimeState.activeTuning_ = pendingLoadResult.descriptor.tuning;
+					}
 					if (!pendingLoadResult.descriptorResolved) {
 						if (!runtimeState.loggedMissingTimelineForCurrentArrangement_) {
 							warningLogs.push_back("No installed arrangement tone metadata: " + pendingLoadResult.resolveFailureReason);

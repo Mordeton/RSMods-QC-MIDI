@@ -27,6 +27,8 @@ namespace Settings {
 }
 namespace GameState {
     inline std::string song = "test-song", arrangement = "lead";
+    inline bool arrangementAvailable = true;
+    inline bool TryGetCurrentArrangementID(std::string& out) { out = arrangementAvailable ? arrangement : ""; return !out.empty(); }
     inline std::string GetSongKey() { return song; }
     inline std::string GetArrangementID() { return arrangement; }
 }
@@ -67,6 +69,13 @@ namespace Midi {
     }
 }
 namespace QCAutomation::ToneSource {
+    inline bool metadataAvailable = false;
+    inline std::string metadataSong, metadataArrangement;
+    inline std::array<int, 6> metadataTuning{};
+    inline bool TryGetArrangementTuning(const std::string& song, const std::string& arrangement, std::array<int, 6>& tuning) {
+        if (!metadataAvailable || song.empty() || arrangement.empty() || song != metadataSong || arrangement != metadataArrangement) return false;
+        tuning = metadataTuning; return true;
+    }
     inline int manualSlot = 0;
     inline std::string tone = "clean";
     inline void Initialize() {}

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "SongTuning.hpp"
 #include <atomic>
+#include <limits>
 
 namespace Setting = Settings::Setting;
 
@@ -10,21 +11,25 @@ namespace Setting = Settings::Setting;
 /// <returns>True when the tuning pointer was resolved, including all-zero offsets.</returns>
 bool SongTuning::TryGetCurrentTuning(std::array<byte, 6>& outTuning) {
 	outTuning = {};
-	uintptr_t addrTuning = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_tuning, Offsets::ptr_tuningOffsets, true);
-
-	if (!addrTuning) {
-		return false;
+	uintptr_t addrTuning = Offsets::baseHandle + Offsets::ptr_tuning;
+	for (const auto offset : Offsets::ptr_tuningOffsets) {
+		uintptr_t next = 0;
+		if (!MemUtil::TryRead(addrTuning, next) || !next ||
+			next > (std::numeric_limits<uintptr_t>::max)() - offset)
+			return false;
+		addrTuning = next + offset;
 	}
-
-	auto tuningData = reinterpret_cast<Tuning*>(addrTuning);
+	Tuning tuningData;
+	if (!MemUtil::TryRead(addrTuning, tuningData))
+		return false;
 
 	outTuning = {
-		tuningData->lowE,
-		tuningData->strA,
-		tuningData->strD,
-		tuningData->strG,
-		tuningData->strB,
-		tuningData->highE
+		tuningData.lowE,
+		tuningData.strA,
+		tuningData.strD,
+		tuningData.strG,
+		tuningData.strB,
+		tuningData.highE
 	};
 	return true;
 }
