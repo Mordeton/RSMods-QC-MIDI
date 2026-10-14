@@ -38,7 +38,7 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'qc-gui-check'
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item GUI/Lib/Newtonsoft.Json.dll $out
-          & "$env:WINDIR/Microsoft.NET/Framework/v4.0.30319/csc.exe" /nologo /target:exe "/out:$out/QCOverridesRegression.exe" /r:GUI/Lib/Newtonsoft.Json.dll GUI/QCOverrides.cs tests/QCOverridesRegression.cs
+          & "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe" /nologo /target:exe "/out:$out\QCOverridesRegression.exe" /r:GUI\Lib\Newtonsoft.Json.dll .\GUI\QCOverrides.cs .\tests\QCOverridesRegression.cs
           if ($LASTEXITCODE -ne 0) { throw 'GUI fixture build failed' }
           & "$out/QCOverridesRegression.exe" tests/qc-overrides-fixtures.json
           if ($LASTEXITCODE -ne 0) { throw 'GUI fixture checks failed' }
