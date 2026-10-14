@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "songKey": "IcedEarth-1776",
+      "arrangementId": "b655b689-3f98-4acf-b054-f35d73386a77",
+      "tones": {
+        "Iced_Earth_Dist": "Overdrive",
+        "Solo": "Clean"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "song": "IcedEarth-1776",
+      "id": "B655B6893F984ACFB054F35D73386A77",
+      "tone": "Iced_Earth_Dist",
+      "expected": "Overdrive"
+    },
+    {
+      "song": "other",
+      "id": "B655B6893F984ACFB054F35D73386A77",
+      "tone": "Iced_Earth_Dist",
+      "expected": ""
+    },
+    {
+      "song": "IcedEarth-1776",
+      "id": "3B10E26674AE472AB5D721A77D6ABA93",
+      "tone": "Iced_Earth_Dist",
+      "expected": ""
+    },
+    {
+      "song": "IcedEarth-1776",
+      "id": "{b655b689-3f98-4acf-b054-f35d73386a77}",
+      "tone": "iced_earth_dist",
+      "expected": ""
+    }
+  ],
+  "invalid": [
+    {
+      "version": 2,
+      "entries": []
+    },
+    {
+      "version": 1,
+      "entries": [
+        {
+          "songKey": "x",
+          "arrangementId": "bad",
+          "tones": {}
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "entries": [
+        {
+          "songKey": "x",
+          "arrangementId": "B655B6893F984ACFB054F35D73386A77",
+          "tones": {
+            "dist": "Nonsense"
+          }
+        }
+      ]
+    }
+  ]
+}

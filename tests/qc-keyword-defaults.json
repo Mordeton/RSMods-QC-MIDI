@@ -1,0 +1,7 @@
+{
+  "Solo": "lead,solo",
+  "Dist": "dist,distortion,fuzz,gain,higain,highgain,dis,_hg",
+  "Od": "overdrive,od,drive,crunch,dirty,breakup,over",
+  "Clean": "clean,acoustic,acous,acc,twang,chime,sparkle,acou",
+  "Mod": "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar,lofi,bitcrush,flang,vibrato,_vib,_talk,pitch,_rot"
+}

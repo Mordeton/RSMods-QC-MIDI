@@ -1,8 +1,23 @@
+#ifdef QC_AUTOMATION_TEST
+#include "../../tests/QCAutomationTestSupport.hpp"
+#else
 #include "../stdafx.h"
 #include "QCAutomation.hpp"
 #include "Midi.hpp"
 #include "ToneSource.hpp"
 #include "../Settings.hpp"
+#endif
+
+#include "QCPanel.hpp"
+#include "QCOverrides.hpp"
+#ifdef QC_AUTOMATION_TEST
+namespace QCAutomation::Panel {
+inline std::string testOverride;
+void Tick(bool) {}
+std::string CurrentOverride(const std::string&) { return testOverride; }
+void PublishStatus(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const std::string&) {}
+}
+#endif
 
 #include <algorithm>
 #include <array>
@@ -111,6 +126,15 @@ namespace {
 	std::string lastSentTargetSpec;
 	std::array<std::string, kQcTargets.size()> lastInvalidTargetSpecByIndex;
 	std::optional<int> lastSentSceneValue;
+	bool sceneSendPending = false;
+    bool targetSendFailed = false, sceneSendFailed = false;
+	bool transposeWasEnabled = false;
+	struct MidiSettingsSnapshot {
+		std::string device;
+		int channel;
+		int sceneCc;
+	};
+	std::optional<MidiSettingsSnapshot> lastMidiSettings;
 	std::optional<int> activeSongSceneValue;
 	bool queuedSongSceneSend = false;
 	bool deferredSongSceneSent = false;
@@ -247,6 +271,32 @@ namespace {
 		return ClampMidi7Bit(configured);
 	}
 
+	void RefreshMidiSettingsSnapshot() {
+		const MidiSettingsSnapshot current{
+			Settings::ReturnSettingValue("QCAutomationDevice"),
+			ClampMidiChannel(Settings::GetModSetting("QCAutomationMidiChannel")),
+			GetSceneCcNumber()
+		};
+		const bool destinationChanged = !lastMidiSettings ||
+			current.device != lastMidiSettings->device || current.channel != lastMidiSettings->channel;
+		const bool sceneControllerChanged = !lastMidiSettings || current.sceneCc != lastMidiSettings->sceneCc;
+		if (destinationChanged) {
+			lastSelectedMidiOutDevice.clear();
+			lastSelectedMidiOutDeviceResolved = false;
+			lastSentTarget.reset();
+			lastSentTargetSpec.clear();
+		}
+		if (destinationChanged || sceneControllerChanged) {
+			lastSentSceneValue.reset();
+			sceneSendPending = true;
+			if (lastMidiSettings) {
+				LOG_INFO(kLogPrefix << "MIDI settings changed; synchronizing "
+					<< (destinationChanged ? "preset and scene" : "scene") << std::endl);
+			}
+		}
+		lastMidiSettings = current;
+	}
+
 	std::string GetOutOfRangeBehavior() {
 		std::string configured = ToLowerAscii(TrimAscii(Settings::ReturnSettingValue("QCAutomationTransposeOutOfRange")));
 		if (configured != "clamp" && configured != "skip") {
@@ -350,10 +400,10 @@ namespace {
 	}
 
 	constexpr const char* kDefaultSoloKeywords = "lead,solo";
-	constexpr const char* kDefaultDistKeywords = "dist,distortion,fuzz,gain,higain,highgain,dis";
+	constexpr const char* kDefaultDistKeywords = "dist,distortion,fuzz,gain,higain,highgain,dis,_hg";
 	constexpr const char* kDefaultOdKeywords = "overdrive,od,drive,crunch,dirty,breakup,over";
-	constexpr const char* kDefaultCleanKeywords = "clean,acoustic,acous,acc,twang,chime,sparkle";
-	constexpr const char* kDefaultModKeywords = "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar";
+	constexpr const char* kDefaultCleanKeywords = "clean,acoustic,acous,acc,twang,chime,sparkle,acou";
+	constexpr const char* kDefaultModKeywords = "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar,lofi,bitcrush,flang,vibrato,_vib,_talk,pitch,_rot";
 	constexpr int kMinClassifierPriority = 1;
 	constexpr int kMaxClassifierPriority = 5;
 
@@ -646,26 +696,8 @@ namespace {
 		queuedSongSceneReason.clear();
 	}
 
-	SongTransposeDecision BuildSongTransposeDecision() {
-		SongTransposeDecision decision;
-
-		const std::array<byte, 6> tuningSnapshot = SongTuning::GetCurrentTuning();
-		if (tuningSnapshot == std::array<byte, 6>{}) {
-			decision.result = SongTransposeResult::Retry;
-			decision.detail = "tuning not available yet";
-			return decision;
-		}
-
-		const Tuning tuning(
-			tuningSnapshot[0],
-			tuningSnapshot[1],
-			tuningSnapshot[2],
-			tuningSnapshot[3],
-			tuningSnapshot[4],
-			tuningSnapshot[5]
-		);
-
-		const std::array<int, 2> highestLowest = SongTuning::GetHighestLowestString(tuning);
+	SongTransposeDecision DecideTranspose(std::array<int, 2> highestLowest, bool strictDrop) {
+        SongTransposeDecision decision;
 		const int highestTuning = highestLowest[0];
 		const int lowestTuning = highestLowest[1];
 		if (highestTuning == 666 && lowestTuning == 666) {
@@ -680,7 +712,7 @@ namespace {
 		// Some charts are effectively drop-style without matching a strict string-by-string
 		// pattern at runtime, so allow a drop-like 2-semitone spread as fallback.
 		if (highestTuning != lowestTuning) {
-			const bool isStrictDrop = SongTuning::IsSongInDrop(tuning);
+			const bool isStrictDrop = strictDrop;
 			const bool isDropLikeSpread =
 				highestTuning <= 0 &&
 				lowestTuning <= 0 &&
@@ -706,6 +738,29 @@ namespace {
 		decision.semitones = highestTuning;
 		return decision;
 	}
+
+	SongTransposeDecision BuildSongTransposeDecision() {
+		SongTransposeDecision decision;
+
+		std::array<byte, 6> tuningSnapshot{};
+		if (!SongTuning::TryGetCurrentTuning(tuningSnapshot)) {
+			decision.result = SongTransposeResult::Retry;
+			decision.detail = "tuning not available yet";
+			return decision;
+		}
+
+		const Tuning tuning(
+			tuningSnapshot[0],
+			tuningSnapshot[1],
+			tuningSnapshot[2],
+			tuningSnapshot[3],
+			tuningSnapshot[4],
+			tuningSnapshot[5]
+		);
+
+		const std::array<int, 2> highestLowest = SongTuning::GetHighestLowestString(tuning);
+        return DecideTranspose(highestLowest, SongTuning::IsSongInDrop(tuning));
+    }
 
 	void ResolveSongTransposeForCurrentContext() {
 		if (!transposeNeedsResolve) {
@@ -883,10 +938,12 @@ namespace {
 
 	bool SendSceneChangeIfNeeded(int sceneValue, bool forceSend = false) {
 		const int clampedSceneValue = ClampMidi7Bit(sceneValue);
-		if (!forceSend && lastSentSceneValue.has_value() && *lastSentSceneValue == clampedSceneValue) {
+		sceneSendPending = sceneSendPending || forceSend;
+		if (!sceneSendPending && lastSentSceneValue.has_value() && *lastSentSceneValue == clampedSceneValue) {
 			return false;
 		}
 
+        sceneSendFailed = true;
 		if (!EnsureConfiguredMidiOutDeviceSelected()) {
 			return false;
 		}
@@ -900,7 +957,9 @@ namespace {
 			return false;
 		}
 
+		sceneSendFailed = false;
 		lastSentSceneValue = clampedSceneValue;
+		sceneSendPending = false;
 		LOG_INFO(kLogPrefix << "sceneSend CC#" << sceneCc
 			<< "=" << clampedSceneValue
 			<< " scene='" << SceneValueToLetter(clampedSceneValue)
@@ -917,10 +976,13 @@ namespace {
 		if (lastSentTarget.has_value() &&
 			*lastSentTarget == decision.target &&
 			lastSentTargetSpec == configuredTargetSpec) {
+            targetSendFailed = false;
 			return false;
 		}
 
+		targetSendFailed = true;
 		if (SendMidiForTarget(decision)) {
+            targetSendFailed = false;
 			lastSentTarget = decision.target;
 			lastSentTargetSpec = configuredTargetSpec;
 			return true;
@@ -952,7 +1014,7 @@ namespace {
 		}
 
 		std::string authoredToneName;
-		if (!QCAutomation::ToneSource::TryGetCurrentAuthoredToneName(authoredToneName)) {
+		if (!QCAutomation::ToneSource::TryGetAutomationToneName(authoredToneName)) {
 			return std::nullopt;
 		}
 
@@ -965,6 +1027,14 @@ namespace {
 		const AutoToneBucket bucket = ClassifyAutoToneBucket(authoredToneName, matchedKeyword);
 		decision.classifierBucket = bucket;
 		decision.matchedKeyword = matchedKeyword;
+        const auto role = QCAutomation::Panel::CurrentOverride(authoredToneName);
+        if (!role.empty()) {
+            for (int i = 1; i <= 5; ++i) if (role == QCAutomation::Overrides::Roles[i]) {
+                decision.target = static_cast<QcTarget>(i - 1);
+                decision.matchedKeyword = "song override: " + role;
+                return decision;
+            }
+        }
 		if (bucket == AutoToneBucket::BassIgnore) {
 			MaybeLogClassifierResultChange(decision);
 			return std::nullopt;
@@ -1012,7 +1082,14 @@ namespace {
 
 		previousInSongPlaybackTimeSec = playbackTimeSec;
 
-		if (Settings::ReturnSettingValue("QCAutomationTransposeEnabled") != "on") {
+		const bool transposeEnabled = Settings::ReturnSettingValue("QCAutomationTransposeEnabled") == "on";
+		if (transposeEnabled && !transposeWasEnabled) {
+			MarkTransposeResolveNeeded("transpose_enabled");
+			sceneSendPending = true;
+			LOG_INFO(kLogPrefix << "Transpose enabled; resolving current song tuning" << std::endl);
+		}
+		transposeWasEnabled = transposeEnabled;
+		if (!transposeEnabled) {
 			transposeNeedsResolve = false;
 			activeSongSceneValue.reset();
 			queuedSongSceneSend = false;
@@ -1076,16 +1153,17 @@ namespace {
 		}
 	}
 
-	void ApplyIdleSceneIfNeeded() {
+	void ApplyIdleSceneIfNeeded(bool presetChanged) {
 		if (Settings::ReturnSettingValue("QCAutomationTransposeEnabled") != "on") {
 			return;
 		}
 
 		const int idleSceneValue = GetIdleSceneValue();
-		(void)SendSceneChangeIfNeeded(idleSceneValue);
+		(void)SendSceneChangeIfNeeded(idleSceneValue, presetChanged);
 	}
 
 	void ResetAutomationState() {
+		targetSendFailed = false; sceneSendFailed = false;
 		loggedMissingMidiDevice = false;
 		loggedConfiguredMidiDeviceNotFound = false;
 		lastSelectedMidiOutDevice.clear();
@@ -1098,6 +1176,9 @@ namespace {
 		lastSentTarget.reset();
 		lastSentTargetSpec.clear();
 		lastSentSceneValue.reset();
+		sceneSendPending = false;
+		transposeWasEnabled = false;
+		lastMidiSettings.reset();
 		activeSongSceneValue.reset();
 		queuedSongSceneSend = false;
 		deferredSongSceneSent = false;
@@ -1120,32 +1201,82 @@ namespace {
 }
 
 namespace QCAutomation {
+    ToneDescription DescribeTone(const std::string& tone, const std::string& overrideRole) {
+        ToneDescription result; std::string keyword;
+        auto bucket = ClassifyAutoToneBucket(tone, keyword);
+        auto target = MapAutoBucketToTarget(bucket);
+        result.automaticRole = bucket == AutoToneBucket::BassIgnore ? "Ignored bass" : Overrides::Roles[static_cast<int>(target) + 1];
+        result.effectiveRole = result.automaticRole;
+        for (int i = 1; i <= 5; ++i) if (overrideRole == Overrides::Roles[i]) {
+            target = static_cast<QcTarget>(i - 1); result.effectiveRole = overrideRole;
+        }
+        if (bucket == AutoToneBucket::BassIgnore && overrideRole.empty()) { result.warning = "Bass ignored by current settings"; return result; }
+        result.target = GetConfiguredTargetSpec(GetQcTargetInfo(target));
+        MidiRecallTarget parsed;
+        if (!TryParseMyPresetsTarget(result.target, parsed)) { result.warning = "Invalid configured preset address; using default"; TryParseMyPresetsTarget(GetQcTargetInfo(target).defaultTarget, parsed); }
+        result.target = parsed.targetSpec;
+        return result;
+    }
+    std::string DescribeTuning(const std::array<int, 6>& tuning, bool available) {
+        if (!available) return "Tuning unavailable; expected scene unknown";
+        std::string text = "Tuning:";
+        for (int n : tuning) text += " " + std::to_string(n);
+        int strings = Settings::ReturnSettingValue("ExtendedRangeFixBassTuning") == "on" &&
+            (tuning[4] == 0 || tuning[4] == 12) && (tuning[5] == 0 || tuning[5] == 12) ? 4 : 6;
+        const auto bounds = std::minmax_element(tuning.begin(), tuning.begin() + strings);
+        bool strictDrop = tuning[0] + 2 == tuning[1];
+        for (int i = 2; i < 6; ++i) strictDrop = strictDrop && tuning[i] == tuning[1];
+        const auto decision = DecideTranspose({*bounds.second, *bounds.first}, strictDrop);
+        if (decision.result != SongTransposeResult::Resolved) return text + " | Unsupported or unavailable tuning";
+        int semitones = decision.semitones;
+        if (Settings::ReturnSettingValue("QCAutomationTransposeEnabled") != "on") return text + " | Transpose disabled";
+        if ((semitones < -7 || semitones > 0) && GetOutOfRangeBehavior() == "skip") return text + " | Scene skipped (out of range)";
+        return text + " | Expected scene " + SceneValueToLetter(-std::clamp(semitones, -7, 0));
+    }
+    void PublishPanelStatus(const std::optional<TargetDecision>& decision, bool inSong) {
+        std::string scene = Settings::ReturnSettingValue("QCAutomationTransposeEnabled") != "on" ? "off" :
+            (inSong ? (activeSongSceneValue ? std::string(1, SceneValueToLetter(*activeSongSceneValue)) : "unavailable") : std::string(1, SceneValueToLetter(GetIdleSceneValue())));
+        std::string tone;
+        if (inSong) ToneSource::TryGetCurrentAuthoredToneName(tone);
+        std::string send = "Pending";
+        if (targetSendFailed || (scene != "off" && sceneSendFailed)) send = "Failed; retry pending";
+        else if (decision && lastSentTarget == decision->target && lastSentTargetSpec == GetConfiguredTargetSpec(GetQcTargetInfo(decision->target)) &&
+            (scene == "off" || (!sceneSendPending && !queuedSongSceneSend && lastSentSceneValue))) send = "Windows send accepted";
+        Panel::PublishStatus(tone, decision && decision->source == EffectiveIntentSource::Auto ? decision->authoredToneName : "", decision ? GetQcTargetInfo(decision->target).roleLabel : "Unresolved",
+            decision ? GetConfiguredTargetSpec(GetQcTargetInfo(decision->target)) : "", decision ? ToString(decision->source) : "auto", scene, send);
+    }
 	void Initialize() {
 		ToneSource::Initialize();
 	}
 
 	void HandleInSongState() {
+        Panel::Tick(true);
 		if (Settings::ReturnSettingValue("QCAutomationEnabled") != "on") {
 			return;
 		}
 
 		const float playbackTimeSec = SongTimer::SongTimer();
+		RefreshMidiSettingsSnapshot();
 		UpdateInSongTransposeContext();
 		ApplyInSongSceneIfNeeded(false, playbackTimeSec);
 		ToneSource::HandleInSongState();
 
 		const auto decision = ResolveInSongTargetDecision();
 		if (!decision.has_value()) {
+            PublishPanelStatus(decision, true);
 			return;
 		}
 
 		const bool presetChanged = ApplyTargetDecision(*decision);
 		ApplyInSongSceneIfNeeded(presetChanged, playbackTimeSec);
+        PublishPanelStatus(decision, true);
 	}
 
 	void HandleOutOfSongState() {
+        Panel::Tick(false);
 		ToneSource::HandleOutOfSongState();
 		transposeStateWasInSong = false;
+		transposeWasEnabled = false;
 		activeSongKey.clear();
 		activeArrangementId.clear();
 		previousInSongPlaybackTimeSec.reset();
@@ -1156,7 +1287,9 @@ namespace QCAutomation {
 			return;
 		}
 
-		(void)ApplyTargetDecision(BuildIdleTargetDecision());
-		ApplyIdleSceneIfNeeded();
+		RefreshMidiSettingsSnapshot();
+		const bool presetChanged = ApplyTargetDecision(BuildIdleTargetDecision());
+		ApplyIdleSceneIfNeeded(presetChanged);
+        PublishPanelStatus(BuildIdleTargetDecision(), false);
 	}
 }

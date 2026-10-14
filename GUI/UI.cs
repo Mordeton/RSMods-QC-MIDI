@@ -66,6 +66,8 @@ namespace RSMods
         bool qcaTargetTextChangeSuppressed = false;
         readonly List<QCAutomationSongPreviewArrangement> qcaSongPreviewArrangements = new List<QCAutomationSongPreviewArrangement>();
         bool qcaSongPreviewSelectionChangeSuppressed = false;
+        readonly QCOverrides qcOverrides = new QCOverrides();
+        readonly System.Windows.Forms.Timer qcOverrideRefresh = new System.Windows.Forms.Timer { Interval = 1000 };
 
         public MainForm()
         {
@@ -81,6 +83,11 @@ namespace RSMods
 
             // Initialize WinForms
             Startup_InitWinForms();
+            qcOverrideRefresh.Tick += (sender, args) => {
+                if (qcOverrides.Refresh(Path.Combine(Constants.RSFolder, "RSMods", "QCOverrides.json"))) QCAutomation_RefreshSongPreviewClassification();
+            };
+            qcOverrideRefresh.Start();
+            FormClosed += (sender, args) => qcOverrideRefresh.Dispose();
 
             // Locate Rocksmith Saves
             Startup_LocateSaves(GenUtil.GetSaveFolder());
@@ -447,7 +454,11 @@ namespace RSMods
                 listBox_Profiles_ListBackups.Items.Add(backup); // Shown with ProfileBackup.ToString()
         }
 
-        private void Startup_ShowUpdateButton() => button_UpdateRSMods.Visible = CheckForUpdates_IsUpdateAvailable();
+        private void Startup_ShowUpdateButton()
+        {
+            button_UpdateRSMods.Text = "QC releases";
+            button_UpdateRSMods.Visible = true;
+        }
 
         private void Startup_CheckStatusAudioPsarc() => SoundPacks_ChangeUIForUnpackedFolder(Directory.Exists("audio_psarc"));
 
@@ -899,6 +910,7 @@ namespace RSMods
             public string ArrangementType { get; set; } = string.Empty;
             public string PersistentID { get; set; } = string.Empty;
             public string ManifestUrn { get; set; } = string.Empty;
+            public string ArrangementID { get; set; } = string.Empty;
             public string SongXmlPath { get; set; } = string.Empty;
             public string SngPath { get; set; } = string.Empty;
             public string ToneBase { get; set; } = string.Empty;
@@ -1198,10 +1210,10 @@ namespace RSMods
             textBox_QCAutomationIdleTarget.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionIdleTargetIdentifier, "MyPresets:32F");
 
             textBox_QCAutomationSoloKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionSoloKeywordsIdentifier, "lead,solo");
-            textBox_QCAutomationDistKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionDistKeywordsIdentifier, "dist,distortion,fuzz,gain,higain,highgain,dis");
+            textBox_QCAutomationDistKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionDistKeywordsIdentifier, "dist,distortion,fuzz,gain,higain,highgain,dis,_hg");
             textBox_QCAutomationODKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionODKeywordsIdentifier, "overdrive,od,drive,crunch,dirty,breakup,over");
-            textBox_QCAutomationCleanKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionCleanKeywordsIdentifier, "clean,acoustic,acous,acc,twang,chime,sparkle");
-            textBox_QCAutomationModKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionModKeywordsIdentifier, "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar");
+            textBox_QCAutomationCleanKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionCleanKeywordsIdentifier, "clean,acoustic,acous,acc,twang,chime,sparkle,acou");
+            textBox_QCAutomationModKeywords.Text = QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionModKeywordsIdentifier, "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar,lofi,bitcrush,flang,vibrato,_vib,_talk,pitch,_rot");
             nUpDown_QCAutomationSoloPriority.Value = QCAutomation_ParseClassifierPriority(
                 QCAutomation_GetOrDefault(ReadSettings.QCAutomationSectionSoloPriorityIdentifier, "5"), 5);
             nUpDown_QCAutomationDistPriority.Value = QCAutomation_ParseClassifierPriority(
@@ -3695,6 +3707,7 @@ namespace RSMods
                 ArrangementName = attributes.ArrangementName ?? string.Empty,
                 ArrangementType = QCAutomation_GetArrangementTypeLabel(attributes.ArrangementType),
                 PersistentID = attributes.PersistentID ?? string.Empty,
+                ArrangementID = (string)JObject.FromObject(attributes).GetValue("ArrangementID", StringComparison.OrdinalIgnoreCase) ?? string.Empty,
                 ManifestUrn = attributes.ManifestUrn ?? string.Empty,
                 SongXmlPath = attributes.SongXml ?? string.Empty,
                 ToneBase = attributes.Tone_Base ?? string.Empty,
@@ -3872,7 +3885,17 @@ namespace RSMods
                 QCAutomationPreviewClassification classification = QCAutomation_ClassifyToneName(toneEntry.ToneName);
                 string targetNote;
                 string qcTarget = QCAutomation_GetTargetForBucket(classification.Bucket, out targetNote);
-                string notes = QCAutomation_CombineNotes(toneEntry.Notes, classification.Notes, targetNote);
+                string automaticTarget = qcTarget;
+                qcOverrides.Refresh(Path.Combine(Constants.RSFolder, "RSMods", "QCOverrides.json"));
+                string role = qcOverrides.Resolve(arrangement.SongKey, arrangement.PersistentID, arrangement.ArrangementID, toneEntry.ToneName);
+                if (!string.IsNullOrEmpty(role)) {
+                    QCAutomationPreviewBucket bucket = role == "Overdrive" ? QCAutomationPreviewBucket.Od :
+                        role == "Distortion" ? QCAutomationPreviewBucket.Dist : role == "Clean" ? QCAutomationPreviewBucket.Clean :
+                        role == "Mod" ? QCAutomationPreviewBucket.Mod : QCAutomationPreviewBucket.Solo;
+                    qcTarget = QCAutomation_GetTargetForBucket(bucket, out targetNote);
+                }
+                string mappingNote = string.IsNullOrEmpty(role) ? "Automatic mapping" : "Song override: " + role + "; automatic target: " + automaticTarget;
+                string notes = QCAutomation_CombineNotes(toneEntry.Notes, classification.Notes, targetNote, mappingNote, qcOverrides.Error);
 
                 dataGridView_QCAutomationSongPreview.Rows.Add(
                     toneEntry.TimeDisplay,
@@ -5444,7 +5467,7 @@ namespace RSMods
             try
             {
                 // Setup HTTP Client
-                string latestRelease_API = "https://api.github.com/repos/Lovrom8/RSMods/releases/latest";
+                string latestRelease_API = "https://api.github.com/repos/Mordeton/RSMods-QC-MIDI/releases/latest";
                 HttpClient client = new HttpClient();
 
                 // Github API won't let us through without a User-Agent.
@@ -5502,41 +5525,11 @@ namespace RSMods
             return JToken.Parse(jsonResponse).SelectToken("body").ToString();
         }
 
+        // Fork releases contain platform-specific assets. Never run upstream's
+        // first release asset over the user's QC fork or Proton installation.
         private void CheckForUpdates_GetInstaller()
         {
-            string jsonResponse = github_UpdateResponse;
-
-            if (jsonResponse == "null")
-                return;
-
-            // Get Download Link For New Installer.
-            string github_newRelease = JToken.Parse(jsonResponse).SelectToken("assets")[0].SelectToken("browser_download_url").ToString();
-            string github_installerName = JToken.Parse(jsonResponse).SelectToken("assets")[0].SelectToken("name").ToString();
-
-            // Download New Installer And Run It
-            using (WebClient webClient = new WebClient())
-            {
-                webClient.DownloadFileCompleted += new AsyncCompletedEventHandler(CheckForUpdates_RunInstaller);
-                webClient.DownloadFileAsync(new Uri(github_newRelease), github_installerName);
-            }
-        }
-
-        private void CheckForUpdates_RunInstaller(object sender, AsyncCompletedEventArgs e)
-        {
-            // Download was canceled.
-            if (e.Cancelled)
-                return;
-
-            // Run Installer and close GUI so we don't cause conflicts / errors.
-            if (e.Error == null)
-            {
-                Task.Run(() => Process.Start("RS2014-Mod-Installer.exe"));
-                Application.Exit();
-            }
-
-            // Error detected
-            else
-                MessageBox.Show(e.Error.Message + "\n" + e.Error.StackTrace);
+            Process.Start("https://github.com/Mordeton/RSMods-QC-MIDI/releases");
         }
 
         private void CheckForUpdates_UpdateRSMods(object sender, EventArgs e) => CheckForUpdates_GetInstaller();

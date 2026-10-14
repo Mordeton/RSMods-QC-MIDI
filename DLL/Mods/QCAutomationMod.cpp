@@ -5,9 +5,9 @@
 
 void QCAutomationMod::OnInitialize(Framework::ModContext& c) {
 	QCAutomation::Initialize();
-	for (unsigned int key = '1'; key <= '4'; ++key) {
+	for (unsigned int key : std::array<unsigned int, 8>{'1', '2', '3', '4', VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4}) {
 		c.Commands().BindKey(
-			"QCToneSlot" + std::to_string(key - '0'), key,
+			"QCToneSlot" + std::to_string(key), key,
 			Framework::KeyEdge::Down, Framework::Availability::Active,
 			[](Framework::ModContext&, const Framework::KeyEvent& event) {
 				QCAutomation::ToneSource::NotifyManualToneSlotHotkey(event.virtualKey);

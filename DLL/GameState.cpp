@@ -92,6 +92,34 @@ bool IsArrangementIdStringValid(const char* str, size_t maxLen)
 /// Gets the SongKey of the current playing song, based on the initial preview.
 /// </summary>
 /// <returns>Last played Song Key</returns>
+namespace {
+bool ReadBoundedQcString(uintptr_t pointer, std::string& out) {
+    out.clear();
+    if (!pointer) return false;
+    for (size_t i = 0; i < 256; ++i) {
+        char c = 0; SIZE_T read = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(pointer + i), &c, 1, &read) || read != 1) return false;
+        if (!c) return !out.empty();
+        out += c;
+    }
+    out.clear(); return false;
+}
+}
+bool GameState::TryGetPreviewSongKey(std::string& out) {
+    std::string raw; out.clear();
+    if (!ReadBoundedQcString(MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_previewName, Offsets::ptr_previewNameOffsets), raw)) return false;
+    if (raw.size() <= 13 || raw.compare(0, 5, "Play_") != 0) return false;
+    const auto suffix = raw.substr(raw.size() - 8);
+    if (suffix != "_Preview" && suffix != "_Invalid") return false;
+    out = raw.substr(5, raw.size() - 13); return true;
+}
+bool GameState::TryGetCurrentArrangementID(std::string& out) {
+    out.clear(); std::string raw;
+    if (!ReadBoundedQcString(MemUtil::FindDMAAddy(Offsets::ptr_currentMenu, Offsets::ptr_arrangementHashOffsets, true), raw)) return false;
+    if (raw.size() != 32 || !std::all_of(raw.begin(), raw.end(), [](unsigned char c) { return std::isxdigit(c); })) return false;
+    out = raw; return true;
+}
+
 std::string GameState::GetSongKey() {
 	uintptr_t previewEventPtr = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_previewName, Offsets::ptr_previewNameOffsets);
 
@@ -137,7 +165,7 @@ std::string GameState::GetCurrentMenu(bool GameNotLoaded) {
 
 	// It seems like the third level of the pointer isn't initialized until you reach the UPLAY login screen,
 	// but the second level actually is, and in there it keeps either an empty string, "TitleMenu", "MainOverlay"
-	// (before you reach the login) or some gibberish that's always the same (after that) 
+	// (before you reach the login) or some gibberish that's always the same (after that)
 	if (GameNotLoaded) {
 		uintptr_t preMainMenuAdr = MemUtil::FindDMAAddy(Offsets::ptr_currentMenu, Offsets::ptr_preMainMenuOffsets, GameNotLoaded);
 

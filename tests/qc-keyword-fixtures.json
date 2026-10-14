@@ -1,0 +1,142 @@
+[
+  {
+    "tone": "AlterRise_lofi",
+    "expected": "MOD",
+    "keyword": "lofi"
+  },
+  {
+    "tone": "BatCountry_lofi",
+    "expected": "MOD",
+    "keyword": "lofi"
+  },
+  {
+    "tone": "BottomsUp_lofi",
+    "expected": "MOD",
+    "keyword": "lofi"
+  },
+  {
+    "tone": "BrandNew_rot",
+    "expected": "MOD",
+    "keyword": "_rot"
+  },
+  {
+    "tone": "Brick By Boring Brick Pitch",
+    "expected": "MOD",
+    "keyword": "pitch"
+  },
+  {
+    "tone": "Earphone_lofi",
+    "expected": "MOD",
+    "keyword": "lofi"
+  },
+  {
+    "tone": "EightBall_bitcrush",
+    "expected": "MOD",
+    "keyword": "bitcrush"
+  },
+  {
+    "tone": "GoneAway_rotary",
+    "expected": "MOD",
+    "keyword": "_rot"
+  },
+  {
+    "tone": "IncLove_rot",
+    "expected": "MOD",
+    "keyword": "_rot"
+  },
+  {
+    "tone": "Iris_hg",
+    "expected": "DIST",
+    "keyword": "_hg"
+  },
+  {
+    "tone": "Juicebox_rotary",
+    "expected": "MOD",
+    "keyword": "_rot"
+  },
+  {
+    "tone": "Knights_vib",
+    "expected": "MOD",
+    "keyword": "_vib"
+  },
+  {
+    "tone": "LegendaryChild_vib",
+    "expected": "MOD",
+    "keyword": "_vib"
+  },
+  {
+    "tone": "Paralyzer_lofi",
+    "expected": "MOD",
+    "keyword": "lofi"
+  },
+  {
+    "tone": "RageKnow_lofi",
+    "expected": "MOD",
+    "keyword": "lofi"
+  },
+  {
+    "tone": "SatchBoogie_flang",
+    "expected": "MOD",
+    "keyword": "flang"
+  },
+  {
+    "tone": "Vibrato",
+    "expected": "MOD",
+    "keyword": "vibrato"
+  },
+  {
+    "tone": "itsmylife_talk",
+    "expected": "MOD",
+    "keyword": "_talk"
+  },
+  {
+    "tone": "motlkick_talk",
+    "expected": "MOD",
+    "keyword": "_talk"
+  },
+  {
+    "tone": "sticktoyourguns_acou",
+    "expected": "CLEAN",
+    "keyword": "acou"
+  },
+  {
+    "tone": "acdcmoneytalks_lead",
+    "expected": "SOLO"
+  },
+  {
+    "tone": "ColdCompany_leada",
+    "expected": "SOLO"
+  },
+  {
+    "tone": "Heavy",
+    "expected": "CLEAN"
+  },
+  {
+    "tone": "Rhythm",
+    "expected": "CLEAN"
+  },
+  {
+    "tone": "Guitar",
+    "expected": "CLEAN"
+  },
+  {
+    "tone": "leadmod",
+    "expected": "MOD"
+  },
+  {
+    "tone": "Iris_HG",
+    "expected": "DIST"
+  },
+  {
+    "tone": "CarsJust_solo",
+    "expected": "SOLO"
+  },
+  {
+    "tone": "bass_lofi",
+    "expected": "BASS_IGNORE"
+  },
+  {
+    "tone": "MuseStock_distlofi",
+    "expected": "DIST"
+  }
+]

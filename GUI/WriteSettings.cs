@@ -123,7 +123,7 @@ namespace RSMods
                     { ReadSettings.MidiAutoTuningIdentifier, CreateDefaultOnOldINI(ReadSettings.MidiAutoTuningIdentifier, "off") }, // Should we be ready to send MIDI signals to a device.
                     { ReadSettings.MidiAutoTuningDeviceIdentifier, CreateDefaultOnOldINI(ReadSettings.MidiAutoTuningDeviceIdentifier, "") }, // Device we should send MIDI signals to.
                     { ReadSettings.MidiInDeviceIdentifier, CreateDefaultOnOldINI(ReadSettings.MidiInDeviceIdentifier, "")}, // Device we should listen to MIDI signals from.
-                    { ReadSettings.MidiAutoTuningWhenIdentifier, CreateDefaultOnOldINI(ReadSettings.MidiAutoTuningWhenIdentifier, "manual") }, // Should we trigger auto tuning "manual"ly (user skips tuning), or in the "tuner". 
+                    { ReadSettings.MidiAutoTuningWhenIdentifier, CreateDefaultOnOldINI(ReadSettings.MidiAutoTuningWhenIdentifier, "manual") }, // Should we trigger auto tuning "manual"ly (user skips tuning), or in the "tuner".
                     { ReadSettings.QCAutomationEnabledIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationEnabledIdentifier, "off") }, // Enables Quad Cortex automation path.
                     { ReadSettings.QCAutomationTestOnSongStartIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationTestOnSongStartIdentifier, "off") }, // Sends one scene CC when entering a song.
                     { ReadSettings.QCAutomationDeviceIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationDeviceIdentifier, "") }, // MIDI out device for Quad Cortex automation.
@@ -233,10 +233,10 @@ namespace RSMods
                     { ReadSettings.QCAutomationSectionManual4TargetIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionManual4TargetIdentifier, "MyPresets:32H") },
                     { ReadSettings.QCAutomationSectionIdleTargetIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionIdleTargetIdentifier, "MyPresets:32F") },
                     { ReadSettings.QCAutomationSectionSoloKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionSoloKeywordsIdentifier, "lead,solo") },
-                    { ReadSettings.QCAutomationSectionDistKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionDistKeywordsIdentifier, "dist,distortion,fuzz,gain,higain,highgain,dis") },
+                    { ReadSettings.QCAutomationSectionDistKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionDistKeywordsIdentifier, "dist,distortion,fuzz,gain,higain,highgain,dis,_hg") },
                     { ReadSettings.QCAutomationSectionODKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionODKeywordsIdentifier, "overdrive,od,drive,crunch,dirty,breakup,over") },
-                    { ReadSettings.QCAutomationSectionCleanKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionCleanKeywordsIdentifier, "clean,acoustic,acous,acc,twang,chime,sparkle") },
-                    { ReadSettings.QCAutomationSectionModKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionModKeywordsIdentifier, "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar") },
+                    { ReadSettings.QCAutomationSectionCleanKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionCleanKeywordsIdentifier, "clean,acoustic,acous,acc,twang,chime,sparkle,acou") },
+                    { ReadSettings.QCAutomationSectionModKeywordsIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionModKeywordsIdentifier, "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar,lofi,bitcrush,flang,vibrato,_vib,_talk,pitch,_rot") },
                     { ReadSettings.QCAutomationSectionSoloPriorityIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionSoloPriorityIdentifier, "5") },
                     { ReadSettings.QCAutomationSectionDistPriorityIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionDistPriorityIdentifier, "2") },
                     { ReadSettings.QCAutomationSectionODPriorityIdentifier, CreateDefaultOnOldINI(ReadSettings.QCAutomationSectionODPriorityIdentifier, "1") },

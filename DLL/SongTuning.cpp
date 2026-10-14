@@ -5,20 +5,20 @@
 namespace Setting = Settings::Setting;
 
 /// <summary>
-/// Get Tuning of all 6 strings (even on bass)
+/// Read all six string offsets, distinguishing unavailable memory from E-standard.
 /// </summary>
-/// <param name="verbose"> - Should we show the tuning in the console **DEBUG BUILD ONLY**</param>
-/// <returns>Current Tuning in a Byte[6] array.</returns>
-std::array<byte, 6> SongTuning::GetCurrentTuning(bool verbose) {
+/// <returns>True when the tuning pointer was resolved, including all-zero offsets.</returns>
+bool SongTuning::TryGetCurrentTuning(std::array<byte, 6>& outTuning) {
+	outTuning = {};
 	uintptr_t addrTuning = MemUtil::FindDMAAddy(Offsets::baseHandle + Offsets::ptr_tuning, Offsets::ptr_tuningOffsets, true);
 
 	if (!addrTuning) {
-		return {};
+		return false;
 	}
 
 	auto tuningData = reinterpret_cast<Tuning*>(addrTuning);
 
-	std::array<byte, 6> allTunings = {
+	outTuning = {
 		tuningData->lowE,
 		tuningData->strA,
 		tuningData->strD,
@@ -26,9 +26,17 @@ std::array<byte, 6> SongTuning::GetCurrentTuning(bool verbose) {
 		tuningData->strB,
 		tuningData->highE
 	};
+	return true;
+}
+
+std::array<byte, 6> SongTuning::GetCurrentTuning(bool verbose) {
+	std::array<byte, 6> allTunings{};
+	if (!TryGetCurrentTuning(allTunings)) {
+		return {};
+	}
 
 	// Print tuning to console. **DEBUG BUILD ONLY**
-	if (verbose) 
+	if (verbose)
 	{
 		for (int i = 0; i < 6; i++)
 		{

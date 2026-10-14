@@ -1,5 +1,7 @@
 #include "stdafx.h"
 #include "Menu.hpp"
+#include "Mods/QCPanel.hpp"
+#include "Mods/QCPanelInput.hpp"
 #include "Mods/AudioDevices.hpp"
 #include "Mods/VoiceOverControl.hpp"
 #include "Mods/Midi.hpp"
@@ -34,6 +36,7 @@ namespace Menu {
 	void RenderImGuiMenu() {
 		ImGui_ImplDX9_NewFrame();
 		ImGui_ImplWin32_NewFrame();
+        QCAutomation::Panel::Input::BeforeFrame();
 		ImGui::NewFrame();
 
 		if (Menu::menuEnabled) {
@@ -45,12 +48,12 @@ namespace Menu {
 			ImGui::End();
 		}
 
+        QCAutomation::Panel::Render();
 		ImGui::EndFrame();
 		ImGui::Render();
 		ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
 
-		ImGui::CaptureKeyboardFromApp(false);
-		ImGui::CaptureMouseFromApp(false);
+
 	}
 
 	/// <summary>
@@ -69,8 +72,9 @@ namespace Menu {
 		if (ImGuiInit) {
 			return;
 		}
-		
+
 		ImGuiInit = true;
+        QCAutomation::Panel::Input::Initialize();
 
 		// Create ImGUI
 		ImGui::CreateContext();
@@ -151,7 +155,7 @@ namespace Menu {
 	}
 
 	void AddMidiMenu() {
-		if (static std::string previewValue = "Select a device"; ImGui::BeginCombo("MIDI devices", previewValue.c_str())) 
+		if (static std::string previewValue = "Select a device"; ImGui::BeginCombo("MIDI devices", previewValue.c_str()))
 		{
 			for (size_t i = 0; i < Midi::NumberOfOutPorts; ++i)
 			{
@@ -225,7 +229,7 @@ namespace Menu {
 		static std::string selectedMicrophone = "";
 		static std::vector<std::string> microphones;
 
-		if (microphones.empty()) 
+		if (microphones.empty())
 		{
 			for (const auto& [key, value] : AudioDevices::activeMicrophones)
 			{
@@ -233,7 +237,7 @@ namespace Menu {
 			}
 		}
 
-		if (ImGui::BeginCombo("Microphones", previewMicrophone.c_str())) 
+		if (ImGui::BeginCombo("Microphones", previewMicrophone.c_str()))
 		{
 			for (const auto& microphone : microphones)
 			{
@@ -268,7 +272,7 @@ namespace Menu {
 		static std::vector<VoiceOver> selectedVoiceOverList = VoiceOverControl::VO_ResultsScreens;
 
 		// Drop-down list of all voice-overs in the selected Voice-Over list.
-		if (ImGui::BeginCombo("Voicelines", previewVoiceline.c_str())) 
+		if (ImGui::BeginCombo("Voicelines", previewVoiceline.c_str()))
 		{
 			for (const auto& voiceOver : selectedVoiceOverList)
 			{

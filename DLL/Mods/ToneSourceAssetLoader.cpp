@@ -1,4 +1,14 @@
+#ifdef QC_ASSET_TEST
+#include <Windows.h>
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <limits>
+#include "../Lib/Json/json.hpp"
+#define LOG_WARNING(x) do { std::cerr << x; } while (0)
+#else
 #include "../stdafx.h"
+#endif
 #include "ToneSourceAssetLoader.hpp"
 
 #include "ToneSourceTimeline.hpp"
@@ -727,6 +737,9 @@ namespace {
 	}
 
 	std::filesystem::path GetGameRootPath() {
+#ifdef QC_ASSET_TEST
+        if (const char* root = std::getenv("QC_TEST_GAME_ROOT")) return root;
+#endif
 		char exePath[MAX_PATH]{};
 		const DWORD len = GetModuleFileNameA(nullptr, exePath, MAX_PATH);
 		if (len == 0 || len >= MAX_PATH) {
@@ -815,6 +828,19 @@ namespace {
 		descriptor.arrangementIDNormalized = NormalizeIdentifier(descriptor.arrangementID);
 		descriptor.persistentIDNormalized = NormalizeIdentifier(descriptor.persistentID);
 
+        descriptor.title = ReadStringField(attributesNode, { "SongName", "songName" });
+        descriptor.artist = ReadStringField(attributesNode, { "ArtistName", "artistName" });
+        auto tuning = attributesNode.find("Tuning");
+        if (tuning != attributesNode.end() && tuning->is_object()) {
+            descriptor.tuningAvailable = true;
+            for (int i = 0; i < 6; ++i) {
+                auto value = tuning->find("string" + std::to_string(i));
+                if (value == tuning->end() || !value->is_number_integer()) { descriptor.tuningAvailable = false; break; }
+                descriptor.tuning[i] = value->get<int>();
+            }
+        }
+        auto cents = attributesNode.find("CentOffset");
+        if (cents != attributesNode.end() && cents->is_number()) { descriptor.cents = cents->get<double>(); descriptor.pitchAvailable = true; }
 		descriptor.toneBase = ReadStringField(attributesNode, { "toneBase", "ToneBase", "Tone_Base" });
 		descriptor.toneA = ReadStringField(attributesNode, { "toneA", "ToneA", "Tone_A" });
 		descriptor.toneB = ReadStringField(attributesNode, { "toneB", "ToneB", "Tone_B" });
@@ -827,7 +853,7 @@ namespace {
 		const bool hasAnyArrangementId = !descriptor.arrangementIDNormalized.empty() || !descriptor.persistentIDNormalized.empty();
 		const bool hasAnyToneNames = !descriptor.toneBase.empty() || !descriptor.toneA.empty() || !descriptor.toneB.empty() || !descriptor.toneC.empty() || !descriptor.toneD.empty();
 
-		if (!descriptor.songKey.empty() && hasAnyArrangementId && (!requireToneNames || hasAnyToneNames) && !descriptor.sngPath.empty()) {
+		if (!descriptor.songKey.empty() && hasAnyArrangementId && (!requireToneNames || (hasAnyToneNames && !descriptor.sngPath.empty()))) {
 			outDescriptors.push_back(std::move(descriptor));
 		}
 	}
@@ -898,7 +924,8 @@ namespace {
 				}
 
 				const std::filesystem::path filePath = entry.path();
-				if (EndsWithCaseInsensitive(filePath.filename().string(), ".psarc")) {
+				if (EndsWithCaseInsensitive(filePath.filename().string(), ".psarc") &&
+                    !EndsWithCaseInsensitive(filePath.filename().string(), "_m.psarc")) {
 					dlcFiles.push_back(filePath);
 				}
 			}
@@ -955,7 +982,7 @@ namespace {
 				continue;
 			}
 
-			CollectDescriptorsFromManifestJson(root, psarcPath, descriptors);
+			CollectDescriptorsFromManifestJson(root, psarcPath, descriptors, false);
 		}
 
 		manifestDescriptorsByPsarc.emplace(psarcKey, std::move(descriptors));
@@ -989,6 +1016,7 @@ namespace {
 	}
 
 	std::optional<std::size_t> FindSngEntryIndex(const PsarcReader& reader, const std::string& desiredPath) {
+		if (NormalizeArchivePath(desiredPath).find("songs/bin/generic/") != 0) return std::nullopt;
 		if (const auto exactMatch = reader.FindEntryIndexByPath(desiredPath)) {
 			return exactMatch;
 		}
@@ -1003,7 +1031,7 @@ namespace {
 		std::optional<std::size_t> onlyMatch;
 		for (std::size_t i = 0; i < reader.Entries().size(); ++i) {
 			const PsarcEntry& entry = reader.Entries()[i];
-			if (entry.pathLower.empty()) {
+			if (entry.pathLower.find("songs/bin/generic/") != 0) {
 				continue;
 			}
 
@@ -1495,6 +1523,7 @@ namespace {
 			}
 
 			for (const ManifestArrangementDescriptor& descriptor : descriptorsIt->second) {
+                if (descriptor.sngPath.empty() || (descriptor.toneBase.empty() && descriptor.toneA.empty() && descriptor.toneB.empty() && descriptor.toneC.empty() && descriptor.toneD.empty())) continue;
 				if (descriptor.songKey != songKey) {
 					continue;
 				}
@@ -1572,18 +1601,38 @@ namespace {
 }
 
 namespace QCAutomation::ToneSourceAssetLoader {
+    static std::mutex loaderMutex;
+    std::vector<ManifestArrangementDescriptor> GetDescriptorsForSong(const std::string& songKey) {
+        std::vector<std::filesystem::path> paths;
+        { std::lock_guard<std::mutex> lock(loaderMutex); RebuildPsarcFileListIfNeeded(); paths = cachedPsarcFileList; }
+        std::vector<ManifestArrangementDescriptor> result;
+        std::set<std::string> seen;
+        for (const auto& path : paths) {
+            std::this_thread::yield();
+            std::lock_guard<std::mutex> lock(loaderMutex);
+            std::string error;
+            if (!EnsureManifestCachedForPsarc(path, error)) continue;
+            for (const auto& d : manifestDescriptorsByPsarc[path.string()]) {
+                const auto key = path.string() + "|" + (d.persistentIDNormalized.empty() ? d.arrangementIDNormalized : d.persistentIDNormalized);
+                if (d.songKey == songKey && seen.insert(key).second) result.push_back(d);
+            }
+        }
+        return result;
+    }
 	bool ResolveDescriptorForCurrentSong(
 		const std::string& songKey,
 		const std::string& arrangementHash,
 		ManifestArrangementDescriptor& outDescriptor,
 		std::string& outMatchedBy,
 		std::string& outFailureReason) {
+		std::lock_guard<std::mutex> lock(loaderMutex);
 		return ResolveDescriptorForCurrentSongImpl(songKey, arrangementHash, outDescriptor, outMatchedBy, outFailureReason);
 	}
 
 	bool BuildToneBaseFallbackTimelineFromDescriptor(
 		const ManifestArrangementDescriptor& descriptor,
 		ToneSourceTimeline::ArrangementToneTimeline& outTimeline) {
+		std::lock_guard<std::mutex> lock(loaderMutex);
 		return BuildToneBaseFallbackTimelineFromDescriptorImpl(descriptor, outTimeline);
 	}
 
@@ -1591,6 +1640,7 @@ namespace QCAutomation::ToneSourceAssetLoader {
 		const ManifestArrangementDescriptor& descriptor,
 		ToneSourceTimeline::ArrangementToneTimeline& outTimeline,
 		std::string& outError) {
+		std::lock_guard<std::mutex> lock(loaderMutex);
 		return BuildTimelineFromDescriptorImpl(descriptor, outTimeline, outError);
 	}
 }

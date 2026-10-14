@@ -4,14 +4,20 @@
 
 #include <filesystem>
 #include <string>
+#include <array>
+#include <mutex>
 
 namespace QCAutomation::ToneSourceAssetLoader {
 	// Internal ToneSource module contract:
-	// - Callers must serialize access (ToneSource currently does this via toneSourceMutex).
+	// - Public entry points serialize cache access internally.
 	// - Functions here may mutate process-lifetime caches and are not thread-safe on their own.
 	struct ManifestArrangementDescriptor {
 		std::filesystem::path psarcPath;
 		std::string songKey;
+        std::string title, artist;
+        std::array<int, 6> tuning{};
+        bool tuningAvailable = false, pitchAvailable = false;
+        double cents = 0;
 		std::string arrangementID;
 		std::string persistentID;
 		std::string arrangementName;
@@ -26,6 +32,8 @@ namespace QCAutomation::ToneSourceAssetLoader {
 		std::string toneD;
 		std::string sngPath;
 	};
+
+    std::vector<ManifestArrangementDescriptor> GetDescriptorsForSong(const std::string& songKey);
 
 	bool ResolveDescriptorForCurrentSong(
 		const std::string& songKey,

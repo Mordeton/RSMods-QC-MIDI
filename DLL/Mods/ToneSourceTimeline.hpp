@@ -45,5 +45,9 @@ namespace QCAutomation::ToneSourceTimeline {
 	ResolveResult ResolveCurrentAuthoredToneName(
 		const ArrangementToneTimeline& timeline,
 		float playbackTimeSec);
+	// QC lookahead is in song seconds; actual authored readers remain unshifted.
+	inline ResolveResult ResolveAutomationTone(const ArrangementToneTimeline& timeline, float position) {
+		return ResolveCurrentAuthoredToneName(timeline, position + 1.0f);
+	}
 	std::string BuildToneSlotDump(const ArrangementToneTimeline& timeline);
 }

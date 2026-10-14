@@ -203,6 +203,15 @@ namespace {
 }
 
 namespace QCAutomation::ToneSource {
+    bool GetActiveIdentity(std::string& song, std::string& arrangement, const std::string& expectedRuntimeId) {
+        std::lock_guard<std::mutex> lock(toneSourceMutex);
+        if (!runtimeState.monitoringCurrentSong_ || !runtimeState.hasActiveTimeline_ || runtimeState.currentArrangementHash_ != expectedRuntimeId) return false;
+        const auto& t = runtimeState.activeTimeline_;
+        song = t.songKey;
+        arrangement = t.persistentIDNormalized.empty() ? t.arrangementIDNormalized : t.persistentIDNormalized;
+        return !song.empty() && !arrangement.empty();
+    }
+
 	void Initialize() {
 		// Installed asset metadata is loaded lazily on song/arrangement transitions.
 	}
@@ -523,6 +532,15 @@ namespace QCAutomation::ToneSource {
 		return ResolveCurrentAuthoredToneName(runtimeState.activeTimeline_, playbackTimeSec).authoredToneName;
 	}
 
+	bool TryGetAutomationToneName(std::string& outToneName) {
+        std::lock_guard<std::mutex> lock(toneSourceMutex);
+        if (!runtimeState.hasActiveTimeline_) return false;
+        // The game timer freezes on pause and changes on paused seeks.
+        auto result = ToneSourceTimeline::ResolveAutomationTone(runtimeState.activeTimeline_, SongTimer::SongTimer());
+        if (!result.authoredToneName) return false;
+        outToneName = *result.authoredToneName;
+        return true;
+    }
 	bool TryGetCurrentAuthoredToneName(std::string& outToneName) {
 		const auto currentToneName = GetCurrentAuthoredToneName(SongTimer::SongTimer());
 		if (!currentToneName) {

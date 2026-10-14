@@ -5,6 +5,7 @@
 #include "Tuning.h"
 
 namespace SongTuning {
+	bool TryGetCurrentTuning(std::array<byte, 6>& outTuning);
 	std::array<byte, 6> GetCurrentTuning(bool verbose = false);
 	bool IsExtendedRangeSong();
 	std::array<int, 2> GetHighestLowestString(bool bass = false);

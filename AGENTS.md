@@ -41,3 +41,16 @@ Validate DLL loading, Wine-visible MIDI, actual MIDI delivery and audio channels
 separately. Do not report hardware success from configuration files or host
 enumeration alone. Coordinate audio service restarts with the user because they
 interrupt audio.
+
+## Latest Windows source imported 2026-10-14
+
+The Linux release branch includes the owner's newer uncommitted Windows QC
+working tree, including F10 panel, per-arrangement overrides and regression
+harnesses. Preserve this behavior when updating upstream. QCAutomationMod owns
+the tick and manual key bindings; do not restore a second legacy dispatch path.
+Keep numpad and number-row manual slots, validity-aware E-standard tuning,
+destination-aware scene caches and failed-send retries.
+
+Run tests/run-qc-regression.ps1 in Windows CI, build DLL and GUI, and run the
+shared C# override fixtures. Linux portable checks do not replace these tests.
+Keep actual Proton input, MIDI delivery, audio and hardware evidence separate.

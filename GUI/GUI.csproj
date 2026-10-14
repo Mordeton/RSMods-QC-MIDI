@@ -119,6 +119,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="QCOverrides.cs" />
     <Compile Include="ASIO\GetASIODevices.cs" />
     <Compile Include="ASIO\ReadSettings.cs" />
     <Compile Include="ASIO\RsAsioLimits.cs" />

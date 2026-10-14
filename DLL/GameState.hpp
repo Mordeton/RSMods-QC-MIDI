@@ -28,6 +28,8 @@ namespace GameState {
 	bool IsMultiplayer();
 	std::string CurrentSelectedUser();
 	std::string GetSongKey();
+    bool TryGetPreviewSongKey(std::string& out);
+    bool TryGetCurrentArrangementID(std::string& out);
 	std::string GetArrangementID();
 
 	inline std::string lastSongKey = "";

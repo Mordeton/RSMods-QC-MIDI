@@ -144,10 +144,10 @@ void Settings::Initialize()
 		{"QCAutomationManual4Target", "MyPresets:32H"},
 		{"QCAutomationIdleTarget", "MyPresets:32F"},
 		{"QCAutomationSoloKeywords", "lead,solo"},
-		{"QCAutomationDistKeywords", "dist,distortion,fuzz,gain,higain,highgain,dis"},
+		{"QCAutomationDistKeywords", "dist,distortion,fuzz,gain,higain,highgain,dis,_hg"},
 		{"QCAutomationODKeywords", "overdrive,od,drive,crunch,dirty,breakup,over"},
-		{"QCAutomationCleanKeywords", "clean,acoustic,acous,acc,twang,chime,sparkle"},
-		{"QCAutomationModKeywords", "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar"},
+		{"QCAutomationCleanKeywords", "clean,acoustic,acous,acc,twang,chime,sparkle,acou"},
+		{"QCAutomationModKeywords", "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar,lofi,bitcrush,flang,vibrato,_vib,_talk,pitch,_rot"},
 		{"QCAutomationSoloPriority", "5"},
 		{"QCAutomationDistPriority", "2"},
 		{"QCAutomationODPriority", "1"},
@@ -408,10 +408,10 @@ void Settings::ReadModSettings() {
 	modSettings["QCAutomationManual4Target"] = readQcValue("Manual4Target", "MyPresets:32H");
 	modSettings["QCAutomationIdleTarget"] = readQcValue("IdleTarget", "MyPresets:32F");
 	modSettings["QCAutomationSoloKeywords"] = readQcValue("SoloKeywords", "lead,solo");
-	modSettings["QCAutomationDistKeywords"] = readQcValue("DistKeywords", "dist,distortion,fuzz,gain,higain,highgain,dis");
+	modSettings["QCAutomationDistKeywords"] = readQcValue("DistKeywords", "dist,distortion,fuzz,gain,higain,highgain,dis,_hg");
 	modSettings["QCAutomationODKeywords"] = readQcValue("ODKeywords", "overdrive,od,drive,crunch,dirty,breakup,over");
-	modSettings["QCAutomationCleanKeywords"] = readQcValue("CleanKeywords", "clean,acoustic,acous,acc,twang,chime,sparkle");
-	modSettings["QCAutomationModKeywords"] = readQcValue("ModKeywords", "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar");
+	modSettings["QCAutomationCleanKeywords"] = readQcValue("CleanKeywords", "clean,acoustic,acous,acc,twang,chime,sparkle,acou");
+	modSettings["QCAutomationModKeywords"] = readQcValue("ModKeywords", "wah,chorus,verb,reverb,delay,echo,trem,tremolo,phase,phaser,flange,flanger,filter,mod,fx,ambient,synth,8va,oct,octave,sitar,lofi,bitcrush,flang,vibrato,_vib,_talk,pitch,_rot");
 	modSettings["QCAutomationSoloPriority"] = readQcValue("SoloPriority", "5");
 	modSettings["QCAutomationDistPriority"] = readQcValue("DistPriority", "2");
 	modSettings["QCAutomationODPriority"] = readQcValue("ODPriority", "1");

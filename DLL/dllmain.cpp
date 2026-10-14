@@ -9,6 +9,7 @@
 #include "FrameProfiler.hpp"
 
 namespace Setting = Settings::Setting;
+#include "Mods/QCPanel.hpp"
 
 #if defined(_DEBUG) || defined(_WWISE_LOGS)
 bool debug = true;
@@ -92,6 +93,7 @@ const bool ensureForcedTopMode = false;
 /// <param name="lParam"> - Data Sent</param>
 /// <returns>Verification that message was sent.</returns>
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM keyPressed, LPARAM lParam) {
+    if (QCAutomation::Panel::HandleInput(hWnd, msg, keyPressed, lParam)) return 0;
 	if (Menu::menuEnabled && ImGui_ImplWin32_WndProcHandler(hWnd, msg, keyPressed, lParam))
 		return true;
 
@@ -354,6 +356,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, uint32_t dwReason, LPVOID) {
 			// Should never happen, but handle gracefully
 			break;
 	}
-	
+
 	return TRUE;
 }
