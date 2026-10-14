@@ -17,7 +17,12 @@ On the owner's Bazzite/KDE machine, native Steam with Proton Experimental
   This is the configured buffer, not a measured end-to-end latency claim.
 - The game uses PipeASIO's experimental 32-bit frontend with Proton's new WoW64.
 - The new F10 panel appeared, and an idle MIDI recall to the configured QC preset
-  was observed in Cortex Control. This does not verify in-song automation yet.
+  was observed in Cortex Control.
+- With build `f23f2f6`, the owner confirmed Supersonic's saved Overdrive mapping
+  recalled the expected preset and scene A, with correct sound and USB 5 note
+  detection on an E-standard guitar. Mod logs corroborated the recall and scene
+  command. Nonzero transposition and authored in-song tone changes remain separate
+  checks; a base-tone-only chart cannot prove timed switching.
 - A crash just after tuning was traced to an unchecked song-timer float read
   inside RSMods (RVA `0xA7C3C` in build `d43e35b`). The CDLC loader was present
   and applied its startup patches. The timer now guards intermediate and final
@@ -28,9 +33,11 @@ On the owner's Bazzite/KDE machine, native Steam with Proton Experimental
   alternate timer. The guarded reader now also tries the alternate when the
   base is unavailable during a song. QC transpose can use the exact playing
   arrangement's retained tuning metadata if live tuning memory is unavailable;
-  it requires a fresh matching identity and six offsets within ±24 semitones. These
-  follow-up corrections still need game verification with transpose enabled.
-- Sustained song play, the full F10 workflow, automated recalls/transpose, reconnect,
+  it requires a fresh matching identity and six offsets within ±24 semitones.
+  Loading also produced impossible finite timer values; the reader rejects times
+  outside −60…86,400 seconds (one minute of count-in through a 24-hour chart).
+  That final filter still needs a fresh game check.
+- Sustained song play, the full F10 workflow, timed recalls/nonzero transpose, reconnect,
   reboot and other Proton versions still need their own runtime checks.
 
 Original Cortex Control is a separate private compatibility installation. It is

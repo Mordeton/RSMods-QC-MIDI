@@ -31,6 +31,17 @@ int main() {
             return SongTimer::Detail::ReadSongTime(inSong, 0x100, offsets, 0x400, offsets, read);
         };
         Check(time() == 12.f, "base timer lost");
+        for (float garbage : {-1.e30f, 1.e30f}) {
+            values[0x320] = garbage;
+            Check(time() == 42.f, "finite loading garbage blocked valid alternate timer");
+            Check(time(false) == 0.f, "finite loading garbage escaped outside song");
+            values[0x620] = garbage;
+            Check(time() == 0.f, "two invalid timers generated a false song time");
+            values[0x620] = 42.f;
+        }
+        values[0x320] = 3600.f;
+        Check(time() == 3600.f, "long valid song time rejected");
+        values[0x320] = 12.f;
         pointers.erase(0x100);
         Check(time() == 42.f, "unreadable base root lost valid rare timer");
         Check(time(false) == 0.f, "unreadable root reused previous song time outside song");

@@ -20,7 +20,10 @@ std::optional<float> ReadTimer(uintptr_t address,
         address = next + offset;
     }
     float value = 0.f;
-    if (!address || !read(address, value) || !std::isfinite(value))
+    // Loading can leave readable recycled memory containing a finite garbage
+    // float. Allow count-in and very long charts, not impossible song times.
+    if (!address || !read(address, value) || !std::isfinite(value) ||
+        value < -60.f || value > 86400.f)
         return std::nullopt;
     return value;
 }
